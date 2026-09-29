@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Instance Cashout | Pokemon TCG Cashout</title>
+    <meta
+      name="description"
+      content="Instance Cashout is built to be the best Pokemon TCG cashout in the market, with fast appraisals and clear payouts."
+    >
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101720'/%3E%3Cpath d='M18 14h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6Z' fill='%23f2c14e'/%3E%3Cpath d='M24 10h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6V16a6 6 0 0 1 6-6Z' fill='%234bd7a8'/%3E%3Cpath d='M27 20h16M27 31h20M27 42h12' stroke='%23101720' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
+    >
+    <link rel="stylesheet" href="styles.css?v=18">
+  </head>
+  <body class="auth-locked">
+    <section class="splash" id="login" aria-labelledby="loginTitle">
+      <header class="splash-header">
+        <a class="text-brand" href="#login" aria-label="Instance Cashout login">Instance Cashout</a>
+      </header>
+      <div class="splash-main">
+        <div class="splash-card">
+          <p class="eyebrow">Pokemon TCG cashout</p>
+          <h1 id="loginTitle">The best Pokemon TCG cashout in the market.</h1>
+          <p class="lead">
+            Access quotes, payout details, and buyer support after Discord login.
+            Instance Cashout is focused on fast Pokemon TCG deals with clear offers.
+          </p>
+          <button class="discord-button" id="discordLogin" type="button">
+            Continue with Discord
+          </button>
+          <dl class="splash-metrics" aria-label="Instance Cashout community metrics">
+            <div>
+              <dt>2,132</dt>
+              <dd>Members</dd>
+            </div>
+            <div>
+              <dt>$2.3M</dt>
+              <dd>Paid out</dd>
+            </div>
+          </dl>
+          <p class="auth-status" id="authStatus" aria-live="polite"></p>
+        </div>
+
+        <aside class="splash-proof" aria-label="Instance Cashout flow preview">
+          <div class="flow-preview">
+            <p class="preview-kicker">Cashout flow</p>
+            <ol class="flow-steps">
+              <li>
+                <span>01</span>
+                <strong>Choose eligible items</strong>
+                <p>Select the Pokemon cards, slabs, sealed product, or collection you want to cash out.</p>
+              </li>
+              <li>
+                <span>02</span>
+                <strong>Ship for review</strong>
+                <p>Send your approved items with tracking so our team can verify condition and contents.</p>
+              </li>
+              <li>
+                <span>03</span>
+                <strong>We confirm value</strong>
+                <p>We inspect the order, confirm authenticity, and finalize the offer before payout.</p>
+              </li>
+              <li>
+                <span>04</span>
+                <strong>Get paid fast</strong>
+                <p>Once confirmed, your payment is released through the agreed payout method.</p>
+              </li>
+            </ol>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <header class="site-header app-shell">
+      <a class="brand" href="#top" aria-label="Instance Cashout home">
+        <span class="text-brand">Instance Cashout</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#cards">Cards</a>
+        <a href="#process">Process</a>
+        <a href="#quote">Get a quote</a>
+        <button class="logout-button" id="logoutButton" type="button">Log out</button>
+      </nav>
+    </header>
+
+    <main id="top" class="app-shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Best Pokemon TCG cashout</p>
+          <h1>The fastest way to cash out Pokemon cards.</h1>
+          <p class="lead">
+            Instance Cashout is built to be the best Pokemon TCG cashout in the market,
+            giving collectors straight appraisals, clear offers, and quick payouts.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#quote">Start a quote</a>
+            <a class="button secondary" href="#cards">See what we buy</a>
+          </div>
+          <dl class="stats" aria-label="Service highlights">
+            <div>
+              <dt>Same day</dt>
+              <dd>initial review</dd>
+            </div>
+            <div>
+              <dt>Raw or graded</dt>
+              <dd>single cards and lots</dd>
+            </div>
+            <div>
+              <dt>Clear offers</dt>
+              <dd>market-based pricing</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="hero-visual" aria-label="Trading cards ready for appraisal">
+          <div class="counter-scene">
+            <div class="cash-stack">
+              <span></span><span></span><span></span><span></span>
+            </div>
+            <div class="slab slab-one">
+              <span class="grade">10</span>
+              <span class="art"></span>
+            </div>
+            <div class="slab slab-two">
+              <span class="grade">9.5</span>
+              <span class="art"></span>
+            </div>
+            <div class="slab slab-three">
+              <span class="grade">8.5</span>
+              <span class="art"></span>
+            </div>
+            <div class="payout-phone">
+              <span class="check">&#10003;</span>
+              <strong>Payout ready</strong>
+              <small>$1,250.00</small>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="cards" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">What we buy</p>
+          <h2>Pokemon first, with support for other major TCG collections.</h2>
+        </div>
+        <div class="card-grid">
+          <article class="buy-card pokemon">
+            <h3>Pokemon</h3>
+            <p>Vintage holos, modern chase cards, sealed boxes, slabs, promos, and full collections.</p>
+          </article>
+          <article class="buy-card one-piece">
+            <h3>One Piece</h3>
+            <p>Manga rares, leaders, alternate arts, sealed product, tournament cards, and bulk lots.</p>
+          </article>
+          <article class="buy-card league">
+            <h3>League of Legends</h3>
+            <p>Collectible cards, promos, limited releases, and related gaming-card inventory.</p>
+          </article>
+          <article class="buy-card magic">
+            <h3>Magic</h3>
+            <p>Reserved List, Commander staples, foils, graded cards, sealed boxes, and binders.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="process" class="process section">
+        <div class="section-heading">
+          <p class="eyebrow">How it works</p>
+          <h2>A simple cashout flow from photos to payout.</h2>
+        </div>
+        <ol class="steps">
+          <li>
+            <span>01</span>
+            <h3>Send photos</h3>
+            <p>Share clear front and back photos, card names, condition notes, and any grading labels.</p>
+          </li>
+          <li>
+            <span>02</span>
+            <h3>Get an offer</h3>
+            <p>We compare current market comps, condition, demand, and collection size before quoting.</p>
+          </li>
+          <li>
+            <span>03</span>
+            <h3>Cash out</h3>
+            <p>Accept the offer and choose an in-person meetup or shipment review before payout.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section id="quote" class="quote-section">
+        <div>
+          <p class="eyebrow">Get a quote</p>
+          <h2>Tell us what you want to cash out.</h2>
+          <p>
+            Add the game, approximate value, and how many cards you have. The form prepares a message
+            you can send from your preferred contact app.
+          </p>
+        </div>
+
+        <form class="quote-form" id="quoteForm">
+          <label>
+            Card type
+            <select id="cardType" name="cardType">
+              <option>Pokemon</option>
+              <option>One Piece</option>
+              <option>League of Legends</option>
+              <option>Magic</option>
+              <option>Mixed collection</option>
+            </select>
+          </label>
+          <label>
+            Collection size
+            <input id="collectionSize" name="collectionSize" type="text" placeholder="Example: 12 slabs, 80 raw cards">
+          </label>
+          <label>
+            Estimated value
+            <input id="estimatedValue" name="estimatedValue" type="text" placeholder="Example: $500-$1,000">
+          </label>
+          <label>
+            Notes
+            <textarea id="notes" name="notes" rows="4" placeholder="List standout cards, condition, grades, or sealed items."></textarea>
+          </label>
+          <button class="button primary" type="submit">Prepare message</button>
+          <output id="messageOutput" class="message-output" aria-live="polite"></output>
+        </form>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
