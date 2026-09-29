@@ -13,7 +13,7 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101720'/%3E%3Cpath d='M18 14h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6Z' fill='%23f2c14e'/%3E%3Cpath d='M24 10h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6V16a6 6 0 0 1 6-6Z' fill='%234bd7a8'/%3E%3Cpath d='M27 20h16M27 31h20M27 42h12' stroke='%23101720' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
     >
-    <link rel="stylesheet" href="styles.css?v=19">
+    <link rel="stylesheet" href="styles.css?v=20">
   </head>
   <body class="auth-locked">
     <section class="splash" id="login" aria-labelledby="loginTitle">
@@ -28,14 +28,9 @@
             Access quotes, payout details, and buyer support after Discord login.
             Instance Cashout is focused on fast Pokemon TCG deals with clear offers.
           </p>
-          <div class="login-actions">
-            <button class="discord-button" id="discordLogin" type="button">
-              Continue with Discord
-            </button>
-            <button class="preview-button" id="previewDashboard" type="button">
-              Preview dashboard
-            </button>
-          </div>
+          <button class="discord-button" id="discordLogin" type="button">
+            Continue with Discord
+          </button>
           <dl class="splash-metrics" aria-label="Instance Cashout community metrics">
             <div>
               <dt>2,132</dt>
@@ -84,7 +79,6 @@
         <span class="text-brand">Instance Cashout</span>
       </a>
       <nav aria-label="Primary navigation">
-        <a href="#dashboard">Dashboard</a>
         <a href="#cards">Cards</a>
         <a href="#process">Process</a>
         <a href="#quote">Get a quote</a>
@@ -93,74 +87,6 @@
     </header>
 
     <main id="top" class="app-shell">
-      <section id="dashboard" class="dashboard-section">
-        <div class="dashboard-heading">
-          <div>
-            <p class="eyebrow">Account dashboard</p>
-            <h1>Welcome back, <span id="dashboardName">collector</span>.</h1>
-            <p class="lead">
-              Your Discord sign-in creates an Instance Cashout account on this browser.
-              Quotes you prepare here stay attached to that Discord profile locally.
-            </p>
-          </div>
-          <div class="profile-card" aria-label="Discord account">
-            <img id="profileAvatar" alt="" class="profile-avatar">
-            <div>
-              <strong id="profileName">Discord account</strong>
-              <span id="profileHandle">Not loaded yet</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="dashboard-grid">
-          <article class="dashboard-panel">
-            <p class="panel-kicker">Account</p>
-            <dl class="account-list">
-              <div>
-                <dt>Discord ID</dt>
-                <dd id="accountDiscordId">Pending</dd>
-              </div>
-              <div>
-                <dt>Account created</dt>
-                <dd id="accountCreatedAt">Pending</dd>
-              </div>
-              <div>
-                <dt>Last login</dt>
-                <dd id="accountLastLogin">Pending</dd>
-              </div>
-            </dl>
-          </article>
-
-          <article class="dashboard-panel">
-            <p class="panel-kicker">Cashout status</p>
-            <div class="status-stack">
-              <div>
-                <strong>Account ready</strong>
-                <span>Discord profile connected</span>
-              </div>
-              <div>
-                <strong>Quote intake</strong>
-                <span>Prepare a quote request below</span>
-              </div>
-              <div>
-                <strong>Payout setup</strong>
-                <span>Confirmed after item review</span>
-              </div>
-            </div>
-          </article>
-
-          <article class="dashboard-panel quote-history-panel">
-            <div class="panel-header">
-              <p class="panel-kicker">Saved quote drafts</p>
-              <button class="text-button" id="clearDrafts" type="button">Clear</button>
-            </div>
-            <ol class="quote-history" id="quoteHistory">
-              <li>No quote drafts yet.</li>
-            </ol>
-          </article>
-        </div>
-      </section>
-
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Best Pokemon TCG cashout</p>

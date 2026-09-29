@@ -4,33 +4,16 @@ const DISCORD_API_BASE = "https://discord.com/api/v10";
 const SESSION_KEY = "instanceCashoutDiscordSession";
 const TOKEN_KEY = "instanceCashoutDiscordToken";
 const STATE_KEY = "instanceCashoutDiscordState";
+const ACTIVE_ACCOUNT_KEY = "instanceCashoutActiveAccount";
 const ACCOUNT_PREFIX = "instanceCashoutAccount:";
 
 const form = document.querySelector("#quoteForm");
 const output = document.querySelector("#messageOutput");
 const loginButton = document.querySelector("#discordLogin");
-const previewButton = document.querySelector("#previewDashboard");
 const logoutButton = document.querySelector("#logoutButton");
 const authStatus = document.querySelector("#authStatus");
-const dashboardName = document.querySelector("#dashboardName");
-const profileAvatar = document.querySelector("#profileAvatar");
-const profileName = document.querySelector("#profileName");
-const profileHandle = document.querySelector("#profileHandle");
-const accountDiscordId = document.querySelector("#accountDiscordId");
-const accountCreatedAt = document.querySelector("#accountCreatedAt");
-const accountLastLogin = document.querySelector("#accountLastLogin");
-const quoteHistory = document.querySelector("#quoteHistory");
-const clearDraftsButton = document.querySelector("#clearDrafts");
 
 let activeAccount = null;
-
-const demoDiscordUser = {
-  id: "preview-1001",
-  username: "previewcollector",
-  global_name: "Preview Collector",
-  discriminator: "0",
-  avatar: null,
-};
 
 function setAuthenticated(isAuthenticated) {
   document.body.classList.toggle("auth-locked", !isAuthenticated);
@@ -60,17 +43,6 @@ function buildDiscordUrl() {
 
 function accountKey(discordId) {
   return `${ACCOUNT_PREFIX}${discordId}`;
-}
-
-function formatDate(value) {
-  if (!value) {
-    return "Pending";
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }
 
 function getDiscordAvatarUrl(user) {
@@ -144,6 +116,7 @@ function upsertAccount(user) {
   };
 
   localStorage.setItem(accountKey(user.id), JSON.stringify(account));
+  localStorage.setItem(ACTIVE_ACCOUNT_KEY, user.id);
   activeAccount = account;
   return account;
 }
@@ -156,42 +129,8 @@ function saveActiveAccount() {
   localStorage.setItem(accountKey(activeAccount.id), JSON.stringify(activeAccount));
 }
 
-function renderQuoteHistory() {
-  if (!quoteHistory || !activeAccount) {
-    return;
-  }
-
-  quoteHistory.innerHTML = "";
-
-  if (!activeAccount.quoteDrafts.length) {
-    const emptyItem = document.createElement("li");
-    emptyItem.textContent = "No quote drafts yet.";
-    quoteHistory.append(emptyItem);
-    return;
-  }
-
-  activeAccount.quoteDrafts.slice(0, 5).forEach((draft) => {
-    const item = document.createElement("li");
-    const title = document.createElement("strong");
-    const meta = document.createElement("span");
-
-    title.textContent = `${draft.cardType} - ${draft.estimatedValue}`;
-    meta.textContent = `${draft.collectionSize} - ${formatDate(draft.createdAt)}`;
-
-    item.append(title, meta);
-    quoteHistory.append(item);
-  });
-}
-
-function renderDashboard(account) {
-  dashboardName.textContent = account.displayName;
-  profileAvatar.src = account.avatarUrl;
-  profileName.textContent = account.displayName;
-  profileHandle.textContent = account.handle;
-  accountDiscordId.textContent = account.id;
-  accountCreatedAt.textContent = formatDate(account.createdAt);
-  accountLastLogin.textContent = formatDate(account.lastLoginAt);
-  renderQuoteHistory();
+function openDashboard() {
+  window.location.href = "dashboard.html";
 }
 
 async function bootAuthGate() {
@@ -208,11 +147,16 @@ async function bootAuthGate() {
 
   try {
     const user = await fetchDiscordUser(accessToken);
-    const account = upsertAccount(user);
-    renderDashboard(account);
+    upsertAccount(user);
+
+    if (hasCallback) {
+      openDashboard();
+    }
   } catch (error) {
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
+    activeAccount = null;
     setAuthenticated(false);
     authStatus.textContent = "Your Discord session expired. Please sign in again.";
   }
@@ -230,35 +174,15 @@ function startDiscordLogin() {
   window.location.href = buildDiscordUrl();
 }
 
-function previewDashboard() {
-  const account = upsertAccount(demoDiscordUser);
-
-  sessionStorage.setItem(SESSION_KEY, "preview");
-  sessionStorage.removeItem(TOKEN_KEY);
-  setAuthenticated(true);
-  renderDashboard(account);
-  window.location.hash = "dashboard";
-}
-
 loginButton.addEventListener("click", startDiscordLogin);
-previewButton.addEventListener("click", previewDashboard);
 
 logoutButton.addEventListener("click", () => {
   sessionStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
   activeAccount = null;
   setAuthenticated(false);
   window.scrollTo({ top: 0, behavior: "auto" });
-});
-
-clearDraftsButton.addEventListener("click", () => {
-  if (!activeAccount) {
-    return;
-  }
-
-  activeAccount.quoteDrafts = [];
-  saveActiveAccount();
-  renderQuoteHistory();
 });
 
 bootAuthGate();
@@ -281,7 +205,6 @@ form.addEventListener("submit", (event) => {
     });
     activeAccount.quoteDrafts = activeAccount.quoteDrafts.slice(0, 10);
     saveActiveAccount();
-    renderQuoteHistory();
   }
 
   output.textContent = `Quote request ready:\n\nCard type: ${cardType}\nCollection size: ${collectionSize}\nEstimated value: ${estimatedValue}\nNotes: ${notes}\n\nPlease send photos of the fronts, backs, and any grade labels for the fastest offer.`;
