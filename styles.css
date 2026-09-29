@@ -285,6 +285,13 @@ body.auth-locked .splash {
     animation: none;
   }
 }
+
+.login-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
 .discord-button {
   align-items: center;
   background:
@@ -340,6 +347,22 @@ body.auth-locked .splash {
 .discord-button > * {
   position: relative;
   z-index: 1;
+}
+
+.preview-button {
+  background: rgba(255, 250, 240, 0.08);
+  border: 1px solid rgba(255, 250, 240, 0.26);
+  color: var(--white);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  min-height: 48px;
+  padding: 0.75rem 1rem;
+}
+
+.preview-button:hover,
+.preview-button:focus-visible {
+  border-color: rgba(255, 250, 240, 0.56);
 }
 
 .auth-status {

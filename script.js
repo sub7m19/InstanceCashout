@@ -9,6 +9,7 @@ const ACCOUNT_PREFIX = "instanceCashoutAccount:";
 const form = document.querySelector("#quoteForm");
 const output = document.querySelector("#messageOutput");
 const loginButton = document.querySelector("#discordLogin");
+const previewButton = document.querySelector("#previewDashboard");
 const logoutButton = document.querySelector("#logoutButton");
 const authStatus = document.querySelector("#authStatus");
 const dashboardName = document.querySelector("#dashboardName");
@@ -22,6 +23,14 @@ const quoteHistory = document.querySelector("#quoteHistory");
 const clearDraftsButton = document.querySelector("#clearDrafts");
 
 let activeAccount = null;
+
+const demoDiscordUser = {
+  id: "preview-1001",
+  username: "previewcollector",
+  global_name: "Preview Collector",
+  discriminator: "0",
+  avatar: null,
+};
 
 function setAuthenticated(isAuthenticated) {
   document.body.classList.toggle("auth-locked", !isAuthenticated);
@@ -221,7 +230,18 @@ function startDiscordLogin() {
   window.location.href = buildDiscordUrl();
 }
 
+function previewDashboard() {
+  const account = upsertAccount(demoDiscordUser);
+
+  sessionStorage.setItem(SESSION_KEY, "preview");
+  sessionStorage.removeItem(TOKEN_KEY);
+  setAuthenticated(true);
+  renderDashboard(account);
+  window.location.hash = "dashboard";
+}
+
 loginButton.addEventListener("click", startDiscordLogin);
+previewButton.addEventListener("click", previewDashboard);
 
 logoutButton.addEventListener("click", () => {
   sessionStorage.removeItem(SESSION_KEY);
