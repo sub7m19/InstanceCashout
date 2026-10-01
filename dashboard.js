@@ -14,6 +14,15 @@ const quoteHistory = document.querySelector("#quoteHistory");
 const clearDraftsButton = document.querySelector("#clearDrafts");
 const logoutButton = document.querySelector("#dashboardLogout");
 const emptyState = document.querySelector("#dashboardEmpty");
+const dashboardEstimate = document.querySelector("#dashboardEstimate");
+const dashboardEstimateSmall = document.querySelector("#dashboardEstimateSmall");
+const dashboardDraftCount = document.querySelector("#dashboardDraftCount");
+const dashboardProgress = document.querySelector("#dashboardProgress");
+const pendingQuoteCount = document.querySelector("#pendingQuoteCount");
+const payoutEstimate = document.querySelector("#payoutEstimate");
+const dashboardTabs = document.querySelectorAll(".dashboard-tab");
+const dashboardPanels = document.querySelectorAll(".dashboard-tab-panel");
+const dashboardTabLinks = document.querySelectorAll("[data-tab-link]");
 
 let activeAccount = null;
 
@@ -32,6 +41,27 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function formatMoney(value) {
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function parseMoney(value) {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Number(String(value).replace(/[^0-9.]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function draftId(index) {
+  return `DRF-${String(index + 1).padStart(5, "0")}`;
+}
+
 function saveActiveAccount() {
   if (!activeAccount) {
     return;
@@ -40,31 +70,86 @@ function saveActiveAccount() {
   localStorage.setItem(accountKey(activeAccount.id), JSON.stringify(activeAccount));
 }
 
+function renderDashboardMetrics() {
+  const drafts = activeAccount?.quoteDrafts ?? [];
+  const estimate = drafts.reduce((sum, draft) => sum + parseMoney(draft.estimatedValue), 0);
+  const draftCount = drafts.length;
+  const progress = Math.min(100, Math.round((estimate / 500) * 100));
+
+  dashboardEstimate.textContent = formatMoney(estimate);
+  dashboardEstimateSmall.textContent = formatMoney(estimate);
+  payoutEstimate.textContent = formatMoney(estimate);
+  pendingQuoteCount.textContent = String(draftCount);
+
+  if (dashboardDraftCount) {
+    dashboardDraftCount.textContent = draftCount
+      ? `${draftCount} saved ${draftCount === 1 ? "draft" : "drafts"} ready for review`
+      : "";
+  }
+
+  if (dashboardProgress) {
+    dashboardProgress.style.width = `${progress}%`;
+  }
+}
+
+function activateTab(tabName) {
+  dashboardTabs.forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.tab === tabName);
+  });
+
+  dashboardPanels.forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.panel === tabName);
+  });
+}
+
 function renderQuoteHistory() {
   quoteHistory.innerHTML = "";
+  renderDashboardMetrics();
+  const drafts = activeAccount?.quoteDrafts ?? [];
 
-  if (!activeAccount || !activeAccount.quoteDrafts.length) {
-    const emptyItem = document.createElement("li");
-    emptyItem.textContent = "No quote drafts yet.";
-    quoteHistory.append(emptyItem);
+  if (!drafts.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+
+    cell.colSpan = 6;
+    cell.textContent = "No quote drafts yet.";
+    row.append(cell);
+    quoteHistory.append(row);
     return;
   }
 
-  activeAccount.quoteDrafts.slice(0, 5).forEach((draft) => {
-    const item = document.createElement("li");
-    const title = document.createElement("strong");
-    const meta = document.createElement("span");
+  drafts.slice(0, 6).forEach((draft, index) => {
+    const row = document.createElement("tr");
+    const id = document.createElement("td");
+    const value = document.createElement("td");
+    const type = document.createElement("td");
+    const size = document.createElement("td");
+    const created = document.createElement("td");
+    const status = document.createElement("td");
+    const badge = document.createElement("span");
 
-    title.textContent = `${draft.cardType} - ${draft.estimatedValue}`;
-    meta.textContent = `${draft.collectionSize} - ${formatDate(draft.createdAt)}`;
+    id.textContent = draftId(index);
+    value.textContent = draft.estimatedValue;
+    type.textContent = draft.cardType;
+    size.textContent = draft.collectionSize;
+    created.textContent = formatDate(draft.createdAt);
+    badge.className = "status-badge";
+    badge.textContent = "Draft";
+    status.append(badge);
 
-    item.append(title, meta);
-    quoteHistory.append(item);
+    row.append(id, value, type, size, created, status);
+    quoteHistory.append(row);
   });
 }
 
 function renderEmptyDashboard() {
   profileAvatar.removeAttribute("src");
+  dashboardName.textContent = "collector";
+  profileName.textContent = "Discord account";
+  profileHandle.textContent = "Not loaded yet";
+  accountDiscordId.textContent = "Pending";
+  accountCreatedAt.textContent = "Pending";
+  accountLastLogin.textContent = "Pending";
   emptyState.classList.add("visible");
   renderQuoteHistory();
 }
@@ -108,6 +193,19 @@ clearDraftsButton.addEventListener("click", () => {
   activeAccount.quoteDrafts = [];
   saveActiveAccount();
   renderQuoteHistory();
+});
+
+dashboardTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    activateTab(tab.dataset.tab);
+  });
+});
+
+dashboardTabLinks.forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    activateTab(link.dataset.tabLink);
+  });
 });
 
 logoutButton.addEventListener("click", () => {

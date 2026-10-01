@@ -13,84 +13,179 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101720'/%3E%3Cpath d='M18 14h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6Z' fill='%23f2c14e'/%3E%3Cpath d='M24 10h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6V16a6 6 0 0 1 6-6Z' fill='%234bd7a8'/%3E%3Cpath d='M27 20h16M27 31h20M27 42h12' stroke='%23101720' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
     >
-    <link rel="stylesheet" href="styles.css?v=20">
+    <link rel="stylesheet" href="styles.css?v=26">
   </head>
   <body class="dashboard-page">
-    <header class="site-header">
+    <header class="site-header dashboard-header">
       <a class="brand" href="index.html" aria-label="Instance Cashout home">
         <span class="text-brand">Instance Cashout</span>
       </a>
       <nav aria-label="Dashboard navigation">
-        <a href="index.html#quote">Get a quote</a>
+        <a href="index.html">Main site</a>
+        <button class="dashboard-header-button" type="button" data-tab-link="settings">User Settings</button>
         <button class="logout-button" id="dashboardLogout" type="button">Log out</button>
       </nav>
     </header>
 
-    <main>
-      <section id="dashboard" class="dashboard-section">
+    <main class="dashboard-single" id="dashboard">
+      <section class="dashboard-overview" aria-label="Dashboard overview">
         <div class="dashboard-heading">
+          <p class="eyebrow">Account dashboard</p>
+          <h1>Welcome back, <span id="dashboardName">collector</span>.</h1>
+        </div>
+
+        <div class="dashboard-profile-card" aria-label="Discord account">
+          <img id="profileAvatar" alt="" class="profile-avatar">
           <div>
-            <p class="eyebrow">Account dashboard</p>
-            <h1>Welcome back, <span id="dashboardName">collector</span>.</h1>
-            <p class="lead">
-              This page is separated from the public site and is ready to be populated from a user's Discord account.
-            </p>
-          </div>
-          <div class="profile-card" aria-label="Discord account">
-            <img id="profileAvatar" alt="" class="profile-avatar">
-            <div>
-              <strong id="profileName">Discord account</strong>
-              <span id="profileHandle">Not loaded yet</span>
-            </div>
+            <strong id="profileName">Discord account</strong>
+            <span id="profileHandle">Not loaded yet</span>
           </div>
         </div>
 
-        <div class="dashboard-grid">
-          <article class="dashboard-panel">
-            <p class="panel-kicker">Account</p>
-            <dl class="account-list">
-              <div>
-                <dt>Discord ID</dt>
-                <dd id="accountDiscordId">Pending</dd>
-              </div>
-              <div>
-                <dt>Account created</dt>
-                <dd id="accountCreatedAt">Pending</dd>
-              </div>
-              <div>
-                <dt>Last login</dt>
-                <dd id="accountLastLogin">Pending</dd>
-              </div>
-            </dl>
-          </article>
+        <article class="earnings-hero">
+          <div>
+            <p class="panel-kicker">Total Earnings</p>
+            <strong id="dashboardEstimate">$0</strong>
+          </div>
+        </article>
 
-          <article class="dashboard-panel">
-            <p class="panel-kicker">Cashout status</p>
-            <div class="status-stack">
-              <div>
-                <strong>Account ready</strong>
-                <span>Discord profile connected</span>
-              </div>
-              <div>
-                <strong>Quote intake</strong>
-                <span>Prepare a quote request from the main site</span>
-              </div>
-              <div>
-                <strong>Payout setup</strong>
-                <span>Confirmed after item review</span>
-              </div>
-            </div>
+        <div class="metric-grid">
+          <article class="metric-card cyan">
+            <span>Open orders</span>
+            <strong>0</strong>
           </article>
+          <article class="metric-card gold">
+            <span>Pending quotes</span>
+            <strong id="pendingQuoteCount">0</strong>
+          </article>
+          <article class="metric-card blue">
+            <span>Payout setup</span>
+            <strong>Ready</strong>
+          </article>
+          <article class="metric-card green">
+            <span>Total estimate</span>
+            <strong id="dashboardEstimateSmall">$0</strong>
+          </article>
+        </div>
+      </section>
 
-          <article class="dashboard-panel quote-history-panel">
-            <div class="panel-header">
-              <p class="panel-kicker">Saved quote drafts</p>
-              <button class="text-button" id="clearDrafts" type="button">Clear</button>
+      <section class="dashboard-workspace" aria-label="Dashboard workspace">
+        <nav class="dashboard-nav" aria-label="Dashboard tabs">
+          <button class="dashboard-tab active" type="button" data-tab="orders">Orders</button>
+          <button class="dashboard-tab" type="button" data-tab="sell">Sell</button>
+          <button class="dashboard-tab" type="button" data-tab="shipments">Shipment and Tracking</button>
+          <button class="dashboard-tab" type="button" data-tab="payouts">Payouts</button>
+        </nav>
+
+        <div class="dashboard-tabs">
+          <section class="dashboard-tab-panel active" id="ordersPanel" data-panel="orders">
+            <div class="table-heading">
+              <div>
+                <h2>Orders</h2>
+                <p>Quote drafts and cashout orders.</p>
+              </div>
+              <a class="button secondary" href="index.html#quote">New quote</a>
             </div>
-            <ol class="quote-history" id="quoteHistory">
-              <li>No quote drafts yet.</li>
-            </ol>
-          </article>
+            <div class="quote-table-wrap">
+              <table class="quote-table">
+                <thead>
+                  <tr>
+                    <th>Draft ID</th>
+                    <th>Estimated value</th>
+                    <th>Card type</th>
+                    <th>Collection size</th>
+                    <th>Created</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="quoteHistory">
+                  <tr>
+                    <td colspan="6">No quote drafts yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="dashboard-tab-panel" id="sellPanel" data-panel="sell">
+            <div class="tab-panel-grid">
+              <article class="dashboard-panel feature-panel">
+                <p class="panel-kicker">Sell</p>
+                <h2>Start a new cashout</h2>
+                <p>Submit card details and estimated value so the review team can prepare a quote.</p>
+                <a class="button primary" href="index.html#quote">Create quote draft</a>
+              </article>
+              <article class="dashboard-panel">
+                <h2>Saved quote tools</h2>
+                <div class="quick-actions">
+                  <a href="#" data-tab-link="orders"><span>O</span>Review orders</a>
+                  <button id="clearDrafts" type="button"><span>-</span>Clear drafts</button>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="dashboard-tab-panel" id="shipmentsPanel" data-panel="shipments">
+            <div class="tab-panel-grid">
+              <article class="dashboard-panel feature-panel">
+                <p class="panel-kicker">Shipment and Tracking</p>
+                <h2>No shipments pending</h2>
+                <p>Tracking details will appear after a quote is approved.</p>
+              </article>
+              <article class="dashboard-panel status-list">
+                <h2>Shipment steps</h2>
+                <div>
+                  <strong>Label created</strong>
+                  <span>Waiting for an approved order.</span>
+                </div>
+                <div>
+                  <strong>In transit</strong>
+                  <span>No active package is being tracked.</span>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="dashboard-tab-panel" id="payoutsPanel" data-panel="payouts">
+            <div class="tab-panel-grid">
+              <article class="dashboard-panel feature-panel">
+                <p class="panel-kicker">Payouts</p>
+                <h2 id="payoutEstimate">$0</h2>
+                <p>Estimated value from saved drafts. Final payout is confirmed after review.</p>
+              </article>
+              <article class="dashboard-panel status-list">
+                <h2>Payout status</h2>
+                <div>
+                  <strong>Method</strong>
+                  <span>Set after first approved order.</span>
+                </div>
+                <div>
+                  <strong>Available balance</strong>
+                  <span>$0 ready to withdraw.</span>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="dashboard-tab-panel" id="settingsPanel" data-panel="settings">
+            <article class="dashboard-panel account-panel" id="account">
+              <h2>User Settings</h2>
+              <dl class="account-list">
+                <div>
+                  <dt>Discord ID</dt>
+                  <dd id="accountDiscordId">Pending</dd>
+                </div>
+                <div>
+                  <dt>Account created</dt>
+                  <dd id="accountCreatedAt">Pending</dd>
+                </div>
+                <div>
+                  <dt>Last login</dt>
+                  <dd id="accountLastLogin">Pending</dd>
+                </div>
+              </dl>
+            </article>
+          </section>
         </div>
 
         <p class="dashboard-empty" id="dashboardEmpty">
