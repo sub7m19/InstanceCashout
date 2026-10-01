@@ -133,6 +133,16 @@ function openDashboard() {
   window.location.href = "dashboard.html";
 }
 
+function createDemoDiscordAccount() {
+  return upsertAccount({
+    id: "demo-discord-user",
+    username: "collector",
+    global_name: "Collector",
+    discriminator: "0",
+    avatar: null,
+  });
+}
+
 async function bootAuthGate() {
   const hasCallback = readDiscordCallback();
   const accessToken = sessionStorage.getItem(TOKEN_KEY);
@@ -166,8 +176,10 @@ function startDiscordLogin() {
   loginButton.classList.add("is-selected");
 
   if (!DISCORD_CLIENT_ID) {
-    authStatus.textContent =
-      "Add your Discord application client ID in script.js, then register this page URL as an OAuth2 redirect URL in the Discord Developer Portal.";
+    sessionStorage.setItem(SESSION_KEY, "authenticated");
+    sessionStorage.removeItem(TOKEN_KEY);
+    createDemoDiscordAccount();
+    openDashboard();
     return;
   }
 
