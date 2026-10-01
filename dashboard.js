@@ -23,8 +23,121 @@ const payoutEstimate = document.querySelector("#payoutEstimate");
 const dashboardTabs = document.querySelectorAll(".dashboard-tab");
 const dashboardPanels = document.querySelectorAll(".dashboard-tab-panel");
 const dashboardTabLinks = document.querySelectorAll("[data-tab-link]");
+const WANTED_ITEMS_KEY = "instanceCashoutWantedItems";
+const wantedGrid = document.querySelector("#wantedGrid");
+const wantedForm = document.querySelector("#wantedForm");
+const openWantedFormButton = document.querySelector("#openWantedForm");
+const cancelWantedFormButton = document.querySelector("#cancelWantedForm");
+const wantedImage = document.querySelector("#wantedImage");
+const wantedImagePreview = document.querySelector("#wantedImagePreview");
+const wantedSearch = document.querySelector("#wantedSearch");
+const wantedSort = document.querySelector("#wantedSort");
+const wantedCategoryButtons = document.querySelectorAll(".sell-chip");
+const wantedAllCount = document.querySelector("#wantedAllCount");
 
 let activeAccount = null;
+let wantedItems = [];
+let wantedImageData = "";
+let activeWantedCategory = "all";
+
+function productImage(title, accent, secondary) {
+  const encodedTitle = title
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 250">
+      <rect width="420" height="250" fill="#fffaf0"/>
+      <rect x="110" y="32" width="200" height="166" rx="10" fill="${accent}" opacity="0.92"/>
+      <rect x="126" y="48" width="168" height="134" rx="8" fill="${secondary}" opacity="0.92"/>
+      <circle cx="166" cy="94" r="30" fill="#fffaf0" opacity="0.9"/>
+      <circle cx="244" cy="132" r="42" fill="#101720" opacity="0.2"/>
+      <path d="M145 162c35-58 84-58 129 0" fill="none" stroke="#fffaf0" stroke-width="11" stroke-linecap="round"/>
+      <text x="210" y="222" text-anchor="middle" fill="#101720" font-family="Arial, sans-serif" font-size="20" font-weight="900">${encodedTitle}</text>
+    </svg>
+  `;
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+const defaultWantedItems = [
+  {
+    id: "want-151-mini-tin",
+    name: "Pokemon 151 Mini Tin Collection 10 Pack",
+    category: "Pokemon",
+    upc: "151151151515",
+    retailer: "Sam's Club",
+    buyPrice: "$74.98",
+    cashout: 490,
+    quantity: 965,
+    image: productImage("151 Mini Tin", "#4bd7a8", "#f2c14e"),
+  },
+  {
+    id: "want-prismatic-etb",
+    name: "Prismatic Evolutions Elite Trainer Box",
+    category: "Sealed",
+    upc: "196214105195",
+    retailer: "Pokemon Center",
+    buyPrice: "$54.99",
+    cashout: 320,
+    quantity: 2047,
+    image: productImage("Prismatic ETB", "#8d6bff", "#4bd7a8"),
+  },
+  {
+    id: "want-destined-rivals",
+    name: "Pokemon Destined Rivals Booster Box",
+    category: "Pokemon",
+    upc: "196214111189",
+    retailer: "Target",
+    buyPrice: "$119.99",
+    cashout: 330,
+    quantity: 940,
+    image: productImage("Destined Rivals", "#f06a5b", "#5ea7ff"),
+  },
+  {
+    id: "want-blooming-waters",
+    name: "Pokemon 151 Blooming Waters Premium Collection",
+    category: "Sealed",
+    upc: "196214119017",
+    retailer: "Best Buy",
+    buyPrice: "$59.99",
+    cashout: 300,
+    quantity: 4070,
+    image: productImage("Blooming Waters", "#5ea7ff", "#4bd7a8"),
+  },
+];
+
+function hydrateDefaultWantedImages() {
+  const defaultImageById = defaultWantedItems.reduce((result, item) => {
+    result[item.id] = item.image;
+    return result;
+  }, {});
+
+  let changed = false;
+  wantedItems = wantedItems.map((item) => {
+    if (!item.image && defaultImageById[item.id]) {
+      changed = true;
+      return { ...item, image: defaultImageById[item.id] };
+    }
+
+    return item;
+  });
+
+  if (changed) {
+    saveWantedItems();
+  }
+}
+
+function seedMissingDefaultWantedItems() {
+  const existingIds = new Set(wantedItems.map((item) => item.id));
+  const missingItems = defaultWantedItems.filter((item) => !existingIds.has(item.id));
+
+  if (missingItems.length) {
+    wantedItems = [...wantedItems, ...missingItems];
+    saveWantedItems();
+  }
+}
 
 function accountKey(discordId) {
   return `${ACCOUNT_PREFIX}${discordId}`;
@@ -47,6 +160,131 @@ function formatMoney(value) {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function wantedItemKey(item) {
+  return item.name.toLowerCase();
+}
+
+function loadWantedItems() {
+  const saved = localStorage.getItem(WANTED_ITEMS_KEY);
+
+  if (!saved) {
+    wantedItems = defaultWantedItems;
+    localStorage.setItem(WANTED_ITEMS_KEY, JSON.stringify(wantedItems));
+    return;
+  }
+
+  try {
+    wantedItems = JSON.parse(saved);
+  } catch (error) {
+    wantedItems = defaultWantedItems;
+  }
+
+  if (!Array.isArray(wantedItems)) {
+    wantedItems = defaultWantedItems;
+  }
+
+  seedMissingDefaultWantedItems();
+  hydrateDefaultWantedImages();
+}
+
+function saveWantedItems() {
+  localStorage.setItem(WANTED_ITEMS_KEY, JSON.stringify(wantedItems));
+}
+
+function wantedImageMarkup(item) {
+  if (item.image) {
+    return `<img src="${item.image}" alt="">`;
+  }
+
+  return `<span>${item.category}</span>`;
+}
+
+function renderWantedCounts() {
+  if (!wantedAllCount) {
+    return;
+  }
+
+  const counts = wantedItems.reduce((result, item) => {
+    result[item.category] = (result[item.category] || 0) + 1;
+    return result;
+  }, {});
+
+  wantedAllCount.textContent = String(wantedItems.length);
+  wantedCategoryButtons.forEach((button) => {
+    const category = button.dataset.category;
+    const count = category === "all" ? wantedItems.length : counts[category] || 0;
+    const countNode = button.querySelector("span");
+
+    if (countNode) {
+      countNode.textContent = String(count);
+    }
+  });
+}
+
+function renderWantedItems() {
+  if (!wantedGrid || !wantedSearch || !wantedSort) {
+    return;
+  }
+
+  const search = wantedSearch.value.trim().toLowerCase();
+  const sort = wantedSort.value;
+
+  let visibleItems = wantedItems.filter((item) => {
+    const matchesCategory = activeWantedCategory === "all" || item.category === activeWantedCategory;
+    const matchesSearch = !search || `${item.name} ${item.upc} ${item.retailer}`.toLowerCase().includes(search);
+    return matchesCategory && matchesSearch;
+  });
+
+  visibleItems = visibleItems.sort((a, b) => {
+    if (sort === "name") {
+      return wantedItemKey(a).localeCompare(wantedItemKey(b));
+    }
+
+    if (sort === "quantity") {
+      return Number(b.quantity) - Number(a.quantity);
+    }
+
+    return Number(b.cashout) - Number(a.cashout);
+  });
+
+  renderWantedCounts();
+  wantedGrid.innerHTML = "";
+
+  if (!visibleItems.length) {
+    const empty = document.createElement("p");
+    empty.className = "wanted-empty";
+    empty.textContent = "No wanted items match this view.";
+    wantedGrid.append(empty);
+    return;
+  }
+
+  visibleItems.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "wanted-card";
+    card.innerHTML = `
+      <div class="wanted-card-image">${wantedImageMarkup(item)}</div>
+      <div class="wanted-card-body">
+        <h3>${item.name}</h3>
+        <dl>
+          <div><dt>UPC</dt><dd>${item.upc || "Pending"}</dd></div>
+          <div><dt>Retailer</dt><dd>${item.retailer || "Any"}</dd></div>
+          <div><dt>Buy price</dt><dd>${item.buyPrice || "Open"}</dd></div>
+          <div><dt>Cashout</dt><dd class="cashout">$${Number(item.cashout).toLocaleString()}</dd></div>
+          <div><dt>Quantity</dt><dd>0/${Number(item.quantity).toLocaleString()}</dd></div>
+        </dl>
+        <div class="wanted-card-actions">
+          <label>
+            <span>Quantity</span>
+            <input type="number" min="1" value="1" aria-label="Quantity for ${item.name}">
+          </label>
+          <button type="button">Sell</button>
+        </div>
+      </div>
+    `;
+    wantedGrid.append(card);
+  });
 }
 
 function parseMoney(value) {
@@ -150,7 +388,7 @@ function renderEmptyDashboard() {
   accountDiscordId.textContent = "Pending";
   accountCreatedAt.textContent = "Pending";
   accountLastLogin.textContent = "Pending";
-  emptyState.classList.add("visible");
+  emptyState.classList.remove("visible");
   renderQuoteHistory();
 }
 
@@ -185,16 +423,6 @@ function loadActiveAccount() {
   renderDashboard(activeAccount);
 }
 
-clearDraftsButton.addEventListener("click", () => {
-  if (!activeAccount) {
-    return;
-  }
-
-  activeAccount.quoteDrafts = [];
-  saveActiveAccount();
-  renderQuoteHistory();
-});
-
 dashboardTabs.forEach((tab) => {
   tab.addEventListener("click", () => {
     activateTab(tab.dataset.tab);
@@ -208,6 +436,85 @@ dashboardTabLinks.forEach((link) => {
   });
 });
 
+clearDraftsButton?.addEventListener("click", () => {
+  if (!activeAccount) {
+    return;
+  }
+
+  activeAccount.quoteDrafts = [];
+  saveActiveAccount();
+  renderQuoteHistory();
+});
+
+openWantedFormButton?.addEventListener("click", () => {
+  wantedForm.hidden = false;
+  openWantedFormButton.hidden = true;
+});
+
+cancelWantedFormButton?.addEventListener("click", () => {
+  wantedForm.reset();
+  wantedImageData = "";
+  wantedImagePreview.removeAttribute("src");
+  wantedForm.hidden = true;
+  openWantedFormButton.hidden = false;
+});
+
+wantedImage?.addEventListener("change", () => {
+  const file = wantedImage.files?.[0];
+
+  if (!file) {
+    wantedImageData = "";
+    wantedImagePreview.removeAttribute("src");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    wantedImageData = String(reader.result);
+    wantedImagePreview.src = wantedImageData;
+  });
+  reader.readAsDataURL(file);
+});
+
+wantedForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(wantedForm);
+  const item = {
+    id: `want-${Date.now()}`,
+    name: String(formData.get("wantedName")).trim(),
+    category: String(formData.get("wantedCategory")),
+    upc: String(formData.get("wantedUpc")).trim(),
+    retailer: String(formData.get("wantedRetailer")).trim(),
+    buyPrice: String(formData.get("wantedBuyPrice")).trim(),
+    cashout: Number(formData.get("wantedCashout")) || 0,
+    quantity: Number(formData.get("wantedQuantity")) || 1,
+    image: wantedImageData,
+  };
+
+  wantedItems.unshift(item);
+  saveWantedItems();
+  renderWantedItems();
+  wantedForm.reset();
+  wantedImageData = "";
+  wantedImagePreview.removeAttribute("src");
+  wantedForm.hidden = true;
+  openWantedFormButton.hidden = false;
+});
+
+wantedCategoryButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    activeWantedCategory = button.dataset.category;
+    wantedCategoryButtons.forEach((categoryButton) => {
+      categoryButton.classList.toggle("active", categoryButton === button);
+    });
+    renderWantedItems();
+  });
+});
+
+wantedSearch?.addEventListener("input", renderWantedItems);
+wantedSort?.addEventListener("change", renderWantedItems);
+
 logoutButton.addEventListener("click", () => {
   sessionStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
@@ -215,4 +522,6 @@ logoutButton.addEventListener("click", () => {
   window.location.href = "index.html";
 });
 
+loadWantedItems();
+renderWantedItems();
 loadActiveAccount();

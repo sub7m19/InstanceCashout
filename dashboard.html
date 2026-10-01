@@ -13,7 +13,7 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101720'/%3E%3Cpath d='M18 14h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6Z' fill='%23f2c14e'/%3E%3Cpath d='M24 10h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6V16a6 6 0 0 1 6-6Z' fill='%234bd7a8'/%3E%3Cpath d='M27 20h16M27 31h20M27 42h12' stroke='%23101720' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
     >
-    <link rel="stylesheet" href="styles.css?v=26">
+    <link rel="stylesheet" href="styles.css?v=32">
   </head>
   <body class="dashboard-page">
     <header class="site-header dashboard-header">
@@ -108,20 +108,86 @@
           </section>
 
           <section class="dashboard-tab-panel" id="sellPanel" data-panel="sell">
-            <div class="tab-panel-grid">
-              <article class="dashboard-panel feature-panel">
-                <p class="panel-kicker">Sell</p>
-                <h2>Start a new cashout</h2>
-                <p>Submit card details and estimated value so the review team can prepare a quote.</p>
-                <a class="button primary" href="index.html#quote">Create quote draft</a>
-              </article>
-              <article class="dashboard-panel">
-                <h2>Saved quote tools</h2>
-                <div class="quick-actions">
-                  <a href="#" data-tab-link="orders"><span>O</span>Review orders</a>
-                  <button id="clearDrafts" type="button"><span>-</span>Clear drafts</button>
+            <div class="sell-market">
+              <div class="sell-toolbar">
+                <div>
+                  <h2>Sell</h2>
+                  <p>Upload items you want to buy from users and manage the current buy list.</p>
                 </div>
-              </article>
+                <button class="button primary" type="button" id="openWantedForm">Add wanted item</button>
+              </div>
+
+              <div class="sell-category-row" aria-label="Sell categories">
+                <button class="sell-chip active" type="button" data-category="all">All items <span id="wantedAllCount">0</span></button>
+                <button class="sell-chip" type="button" data-category="Pokemon">Pokemon <span>0</span></button>
+                <button class="sell-chip" type="button" data-category="One Piece">One Piece <span>0</span></button>
+                <button class="sell-chip" type="button" data-category="Sealed">Sealed <span>0</span></button>
+                <button class="sell-chip" type="button" data-category="Slabs">Slabs <span>0</span></button>
+              </div>
+
+              <div class="sell-controls">
+                <label class="sell-search">
+                  <span>Search wanted items</span>
+                  <input id="wantedSearch" type="search" placeholder="Search products...">
+                </label>
+                <label class="sell-sort">
+                  <span>Sort</span>
+                  <select id="wantedSort">
+                    <option value="payout">Highest payout</option>
+                    <option value="name">Name</option>
+                    <option value="quantity">Quantity needed</option>
+                  </select>
+                </label>
+              </div>
+
+              <form class="wanted-form" id="wantedForm" hidden>
+                <div class="wanted-image-field">
+                  <img id="wantedImagePreview" alt="">
+                  <label>
+                    Product image
+                    <input id="wantedImage" name="wantedImage" type="file" accept="image/*">
+                  </label>
+                </div>
+                <label>
+                  Product name
+                  <input id="wantedName" name="wantedName" type="text" placeholder="Example: Pokemon 151 Booster Bundle" required>
+                </label>
+                <label>
+                  Category
+                  <select id="wantedCategory" name="wantedCategory">
+                    <option>Pokemon</option>
+                    <option>One Piece</option>
+                    <option>Sealed</option>
+                    <option>Slabs</option>
+                  </select>
+                </label>
+                <label>
+                  UPC / ID
+                  <input id="wantedUpc" name="wantedUpc" type="text" placeholder="Example: 196214118392">
+                </label>
+                <label>
+                  Retailer
+                  <input id="wantedRetailer" name="wantedRetailer" type="text" placeholder="Example: Pokemon Center">
+                </label>
+                <label>
+                  Buy price
+                  <input id="wantedBuyPrice" name="wantedBuyPrice" type="text" placeholder="Example: $59.99">
+                </label>
+                <label>
+                  Cashout
+                  <input id="wantedCashout" name="wantedCashout" type="number" min="0" step="1" placeholder="Example: 300" required>
+                </label>
+                <label>
+                  Quantity needed
+                  <input id="wantedQuantity" name="wantedQuantity" type="number" min="1" step="1" value="1" required>
+                </label>
+                <div class="wanted-form-actions">
+                  <button class="button primary" type="submit">Save item</button>
+                  <button class="button secondary" type="button" id="cancelWantedForm">Cancel</button>
+                </div>
+              </form>
+
+              <div class="wanted-grid" id="wantedGrid" aria-live="polite"></div>
             </div>
           </section>
 
@@ -188,12 +254,10 @@
           </section>
         </div>
 
-        <p class="dashboard-empty" id="dashboardEmpty">
-          No Discord account is loaded yet. Once Discord OAuth is configured, signed-in users will be sent here automatically.
-        </p>
+        <p class="dashboard-empty" id="dashboardEmpty"></p>
       </section>
     </main>
 
-    <script src="dashboard.js"></script>
+    <script src="dashboard.js?v=5"></script>
   </body>
 </html>
