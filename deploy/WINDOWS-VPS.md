@@ -4,7 +4,7 @@ Instance Cashout runs on the same VPS as BUFFSQUAD, next to it:
 
 | | BUFFSQUAD | Instance Cashout |
 |---|---|---|
-| Address | `https://app.buffsquad.net` | `https://cashout.buffsquad.net` |
+| Address | `https://aco.buffsquad.net` | `https://instance-cashout.buffsquad.net` |
 | Folder | `C:\buffsquad` | `C:\instancecashout` |
 | Port (on the VPS only) | 8000 | 8001 |
 | Discord app | BUFFSQUAD | Instance Cashout (its own) |
@@ -21,8 +21,8 @@ Your time: about 20 minutes.
 2. **OAuth2** page:
    - Copy the **Client ID**.
    - Under **Redirects**, add both of these and **Save**:
-     - `https://cashout.buffsquad.net/`
-     - `https://cashout.buffsquad.net/index.html`
+     - `https://instance-cashout.buffsquad.net/`
+     - `https://instance-cashout.buffsquad.net/index.html`
 3. Paste the Client ID into `script.js` on the first line (`const DISCORD_CLIENT_ID = "...";`),
    commit and push. (The Client ID isn't a secret; it's fine in the code.)
 
@@ -32,7 +32,7 @@ No client secret or bot token is needed: the site signs in with Discord in the b
 
 1. In Cloudflare, open **Zero Trust** → **Networks** → **Tunnels** → the `buffsquad` tunnel → **Edit**.
 2. **Public Hostname** tab → **Add a public hostname**:
-   - Subdomain: `cashout` · Domain: `buffsquad.net`
+   - Subdomain: `instance-cashout` · Domain: `buffsquad.net`
    - Service type: `HTTP` · URL: `localhost:8001`
    - **Save hostname**.
 
@@ -56,9 +56,9 @@ you're looking for adding a public hostname to the existing tunnel.
 
 ## Part 4: Check it works
 
-1. Open `https://cashout.buffsquad.net` and sign in with Discord.
+1. Open `https://instance-cashout.buffsquad.net` and sign in with Discord.
 2. Submit tracking with photos for a test order, and check it shows on the dashboard.
-3. `https://app.buffsquad.net` should still work as before.
+3. `https://aco.buffsquad.net` should still work as before.
 
 ## Part 5: Turn off GitHub Pages
 

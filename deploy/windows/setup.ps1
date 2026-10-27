@@ -21,7 +21,7 @@
   http://localhost:8001. No ports need to be opened in the firewall.
 #>
 param(
-  [string]$Domain = "cashout.buffsquad.net",
+  [string]$Domain = "instance-cashout.buffsquad.net",
   [int]$Port = 8001,
   [string]$Repo = "https://github.com/sub7m19/InstanceCashout.git"
 )
