@@ -309,6 +309,9 @@ button {
 }
 
 .step {
+  /* Steps fade in one after another; --i staggers each step's animations. */
+  animation: step-in 0.5s var(--ease) backwards;
+  animation-delay: calc(var(--i) * 80ms);
   color: var(--text-faint);
   counter-increment: step;
   font-size: 0.82rem;
@@ -316,9 +319,14 @@ button {
   position: relative;
 }
 
-/* Connector line between markers */
-.step::after {
-  background: var(--border-strong);
+.step:nth-child(1) { --i: 0; }
+.step:nth-child(2) { --i: 1; }
+.step:nth-child(3) { --i: 2; }
+.step:nth-child(4) { --i: 3; }
+
+/* Connector line between markers: ::after is the track, ::before fills it */
+.step::after,
+.step::before {
   content: "";
   height: 2px;
   left: 34px;
@@ -327,12 +335,36 @@ button {
   top: 13px;
 }
 
-.step:last-child::after {
+.step::after {
+  background: var(--border-strong);
+}
+
+.step::before {
+  background: var(--green);
+  transform: scaleX(0);
+  transform-origin: left;
+  z-index: 1;
+}
+
+.step:last-child::after,
+.step:last-child::before {
   display: none;
 }
 
-.step.done::after {
-  background: var(--green);
+/* Completed lines draw themselves in, in order */
+.step.done::before {
+  animation: line-fill 0.6s var(--ease) backwards;
+  animation-delay: calc(250ms + var(--i) * 150ms);
+  transform: scaleX(1);
+}
+
+/* A shimmer runs from the current step toward the next one */
+.step.current::before {
+  animation: line-flow 2.4s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent) no-repeat;
+  background-size: 40% 100%;
+  opacity: 0.85;
+  transform: none;
 }
 
 .step-marker {
@@ -347,6 +379,8 @@ button {
   height: 28px;
   justify-content: center;
   margin-bottom: 0.6rem;
+  position: relative;
+  transition: transform 0.2s var(--ease), border-color 0.2s var(--ease);
   width: 28px;
 }
 
@@ -358,11 +392,23 @@ button {
   color: var(--text-muted);
   display: block;
   font-size: 0.92rem;
+  transition: color 0.2s var(--ease);
+}
+
+.step:hover .step-marker {
+  transform: translateY(-2px) scale(1.08);
+}
+
+.step:hover strong {
+  color: var(--text);
 }
 
 .step.done .step-marker {
+  animation: marker-pop 0.45s var(--ease) backwards;
+  animation-delay: calc(150ms + var(--i) * 150ms);
   background: var(--green);
   border-color: var(--green);
+  box-shadow: 0 0 12px rgba(75, 215, 168, 0.35);
   color: var(--on-accent);
 }
 
@@ -371,9 +417,21 @@ button {
 }
 
 .step.current .step-marker {
+  animation: marker-glow 2.4s ease-in-out infinite;
   border-color: var(--gold);
   box-shadow: 0 0 0 4px var(--gold-soft);
   color: var(--gold);
+}
+
+/* Ring that pulses out from the current step */
+.step.current .step-marker::after {
+  animation: marker-ring 2.4s var(--ease) infinite;
+  border: 2px solid var(--gold);
+  border-radius: 50%;
+  content: "";
+  inset: -2px;
+  pointer-events: none;
+  position: absolute;
 }
 
 .step.done strong,
@@ -382,9 +440,74 @@ button {
 }
 
 .step-hint {
+  animation: step-in 0.5s var(--ease) 0.35s backwards;
   color: var(--text-muted);
   font-size: 0.88rem;
   margin: 0.85rem 0 0;
+}
+
+/* Set by dashboard.js when the hint text changes */
+.step-hint.is-new {
+  animation: hint-in 0.4s var(--ease) backwards;
+}
+
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes line-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes line-flow {
+  from {
+    background-position: -100% 0;
+  }
+
+  to {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes marker-pop {
+  0% {
+    transform: scale(0.6);
+  }
+
+  60% {
+    transform: scale(1.15);
+  }
+}
+
+@keyframes marker-glow {
+  50% {
+    box-shadow: 0 0 0 6px var(--gold-soft), 0 0 16px rgba(242, 193, 78, 0.3);
+  }
+}
+
+@keyframes marker-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+
+  70%,
+  to {
+    opacity: 0;
+    transform: scale(1.8);
+  }
 }
 
 /* Stats */
@@ -1372,7 +1495,8 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .step:nth-child(2)::after {
+  .step:nth-child(2)::after,
+  .step:nth-child(2)::before {
     display: none;
   }
 
@@ -1431,5 +1555,18 @@ button {
   *::before,
   *::after {
     transition-duration: 0ms !important;
+  }
+
+  .step,
+  .step::before,
+  .step-marker,
+  .step-marker::after,
+  .step-hint {
+    animation: none !important;
+  }
+
+  .step.current::before,
+  .step.current .step-marker::after {
+    display: none;
   }
 }

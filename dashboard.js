@@ -619,14 +619,26 @@ function renderSummary(rows) {
   });
 
   if (pendingShipment) {
-    stepHint.textContent = `Next: photograph and pack ${pendingShipment.id}, ship it with your own label, then add the tracking number under Shipments.`;
+    setStepHint(`Next: photograph and pack ${pendingShipment.id}, ship it with your own label, then add the tracking number under Shipments.`);
   } else if (latest?.status === "transit") {
-    stepHint.textContent = `${latest.id} is on the way. We'll verify it as soon as it arrives.`;
+    setStepHint(`${latest.id} is on the way. We'll verify it as soon as it arrives.`);
   } else if (accountDrafts().length) {
-    stepHint.textContent = "Your quote is in review. You can also sell straight from the buy list.";
+    setStepHint("Your quote is in review. You can also sell straight from the buy list.");
   } else {
-    stepHint.textContent = "Start by choosing items from the buy list.";
+    setStepHint("Start by choosing items from the buy list.");
   }
+}
+
+function setStepHint(text) {
+  if (stepHint.textContent === text) {
+    return;
+  }
+
+  stepHint.textContent = text;
+  // Restart the fade-in for the new text.
+  stepHint.classList.remove("is-new");
+  void stepHint.offsetWidth;
+  stepHint.classList.add("is-new");
 }
 
 function renderAccountData() {
