@@ -1,7 +1,5 @@
 const ACTIVE_ACCOUNT_KEY = "instanceCashoutActiveAccount";
 const ACCOUNT_PREFIX = "instanceCashoutAccount:";
-const SESSION_KEY = "instanceCashoutDiscordSession";
-const TOKEN_KEY = "instanceCashoutDiscordToken";
 const WANTED_ITEMS_KEY = "instanceCashoutWantedItems";
 const CART_KEY = "instanceCashoutCart";
 const TABS = ["orders", "sell", "shipments", "payouts", "settings"];
@@ -677,7 +675,39 @@ function renderProfile(account) {
   accountLastLogin.textContent = formatDate(account.lastLoginAt);
 }
 
-function loadActiveAccount() {
+function discordAvatarUrl(user) {
+  if (user.avatar) {
+    return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`;
+  }
+
+  return `https://cdn.discordapp.com/embed/avatars/${Number(user.discriminator || 0) % 5}.png`;
+}
+
+// Orders live in this browser, keyed by Discord id; the profile comes from the server session.
+function upsertAccount(user) {
+  const previous = readJson(accountKey(user.id), {});
+  const now = new Date().toISOString();
+
+  return {
+    ...previous,
+    id: user.id,
+    username: user.username,
+    displayName: user.globalName || user.username,
+    handle: user.discriminator && user.discriminator !== "0" ? `${user.username}#${user.discriminator}` : user.username,
+    avatarUrl: discordAvatarUrl(user),
+    createdAt: previous.createdAt || now,
+    lastLoginAt: now,
+    quoteDrafts: Array.isArray(previous.quoteDrafts) ? previous.quoteDrafts : [],
+  };
+}
+
+function showAccount(account) {
+  activeAccount = account;
+  renderProfile(activeAccount);
+  renderAccountData();
+}
+
+function loadSavedAccount() {
   let accountId = null;
 
   try {
@@ -686,9 +716,38 @@ function loadActiveAccount() {
     accountId = null;
   }
 
-  activeAccount = accountId ? readJson(accountKey(accountId), null) : null;
-  renderProfile(activeAccount);
-  renderAccountData();
+  return accountId ? readJson(accountKey(accountId), null) : null;
+}
+
+async function loadActiveAccount() {
+  let response;
+
+  try {
+    response = await fetch(`${API_BASE}/api/me`);
+  } catch (error) {
+    // Offline: show what this browser has saved.
+    showAccount(loadSavedAccount());
+    return;
+  }
+
+  if (response.status === 401) {
+    window.location.replace("index.html");
+    return;
+  }
+
+  if (!response.ok) {
+    showAccount(loadSavedAccount());
+    return;
+  }
+
+  const account = upsertAccount(await response.json());
+  writeJson(accountKey(account.id), account);
+  try {
+    localStorage.setItem(ACTIVE_ACCOUNT_KEY, account.id);
+  } catch (error) {
+    // Blocked storage: the account still shows for this visit.
+  }
+  showAccount(account);
 }
 
 /* Tabs */
@@ -958,14 +1017,6 @@ $("#shipForm").addEventListener("submit", (event) => {
   }
 });
 
-function discordToken() {
-  try {
-    return sessionStorage.getItem(TOKEN_KEY);
-  } catch (error) {
-    return null;
-  }
-}
-
 function setShipUploading(percent) {
   const button = $("#shipSubmit");
   const uploading = percent !== null;
@@ -986,13 +1037,6 @@ function applyShipment(order, shipment) {
 }
 
 async function uploadShipment(order, carrier, tracking) {
-  const token = discordToken();
-
-  if (!token) {
-    showToast("Log in with Discord again to upload photos.");
-    return;
-  }
-
   const form = new FormData();
   form.append("orderId", order.id);
   form.append("carrier", carrier);
@@ -1009,7 +1053,6 @@ async function uploadShipment(order, carrier, tracking) {
   // XHR instead of fetch so we can show upload progress for large photo sets.
   const request = new XMLHttpRequest();
   request.open("POST", `${API_BASE}/api/shipments`);
-  request.setRequestHeader("Authorization", `Bearer ${token}`);
   request.responseType = "json";
   request.upload.addEventListener("progress", (event) => {
     if (event.lengthComputable) {
@@ -1018,6 +1061,11 @@ async function uploadShipment(order, carrier, tracking) {
   });
   request.addEventListener("load", () => {
     setShipUploading(null);
+
+    if (request.status === 401) {
+      showToast("Log in with Discord again to upload photos.");
+      return;
+    }
 
     if (request.status !== 201) {
       showToast(request.response?.error || "Upload failed. Please try again.");
@@ -1041,14 +1089,12 @@ async function uploadShipment(order, carrier, tracking) {
 
 // Pull shipments saved on the server so tracking shows up on every device the customer uses.
 async function syncShipments() {
-  const token = discordToken();
-
-  if (!token || !activeAccount) {
+  if (!activeAccount) {
     return;
   }
 
   try {
-    const response = await fetch(`${API_BASE}/api/shipments`, { headers: { Authorization: `Bearer ${token}` } });
+    const response = await fetch(`${API_BASE}/api/shipments`);
     if (!response.ok) {
       return;
     }
@@ -1067,16 +1113,15 @@ async function syncShipments() {
   }
 }
 
-/* Photo viewer: photos need the auth header, so load them as blobs. */
+/* Photo viewer */
 
 let viewerUrls = [];
 
 async function openPhotoViewer(orderId) {
   const order = accountOrders().find((entry) => entry.id === orderId);
-  const token = discordToken();
 
-  if (!order?.photos || !token) {
-    showToast("Log in with Discord to view photos.");
+  if (!order?.photos) {
+    showToast("No photos for this order yet.");
     return;
   }
 
@@ -1098,7 +1143,6 @@ async function openPhotoViewer(orderId) {
     try {
       const response = await fetch(
         `${API_BASE}/api/shipments/${encodeURIComponent(order.id)}/photos/${encodeURIComponent(tile.dataset.photo)}`,
-        { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!response.ok) {
         throw new Error(String(response.status));
@@ -1174,13 +1218,17 @@ wantedForm.addEventListener("submit", (event) => {
   showToast("Buy-list item saved.");
 });
 
-logoutButton.addEventListener("click", () => {
+logoutButton.addEventListener("click", async () => {
   try {
-    sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
   } catch (error) {
-    // Ignore blocked storage; we still leave the dashboard.
+    // Ignore blocked storage; we still sign out.
+  }
+
+  try {
+    await fetch(`${API_BASE}/auth/logout`, { method: "POST" });
+  } catch (error) {
+    // Offline: the session cookie expires on its own.
   }
 
   window.location.href = "index.html";
@@ -1211,6 +1259,5 @@ loadWantedItems();
 loadCart();
 renderWantedItems();
 renderCart();
-loadActiveAccount();
 activateTab(location.hash.slice(1), { updateHash: false });
-syncShipments();
+loadActiveAccount().then(syncShipments);

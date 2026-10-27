@@ -9,8 +9,9 @@
   What it does (safe to run again; it skips what's already done):
     - Installs Python 3.13 and Git if they're missing (BUFFSQUAD's setup already did)
     - Puts the code in C:\instancecashout\app and its Python packages in C:\instancecashout\venv
-    - Keeps uploaded photos in C:\instancecashout\data\uploads (backups next to them),
-      readable only by Administrators and SYSTEM
+    - Creates C:\instancecashout\instancecashout.env (settings: Discord login, cookie key) and
+      keeps uploaded photos in C:\instancecashout\data\uploads (backups next to them),
+      both readable only by Administrators and SYSTEM
     - Adds three scheduled tasks, all running as SYSTEM:
         InstanceCashout App     starts the website at boot
         InstanceCashout Deploy  every minute: pulls new code from GitHub, tests it, restarts
@@ -30,6 +31,7 @@ $ErrorActionPreference = "Stop"
 $Root = "C:\instancecashout"
 $App = "$Root\app"
 $Venv = "$Root\venv"
+$EnvFile = "$Root\instancecashout.env"  # main.py reads it from next to the app folder
 $PythonExe = "C:\Program Files\Python313\python.exe"
 $GitExe = "C:\Program Files\Git\cmd\git.exe"
 $PythonVersion = "3.13.17"
@@ -100,9 +102,30 @@ if (-not (Test-Path "$Venv\Scripts\python.exe")) { & $PythonExe -m venv $Venv }
 if ($LASTEXITCODE -ne 0) { throw "Installing Python packages failed. Check the internet connection and run this again." }
 Done "Installed"
 
-# 5. Private folders
-Step "Uploads folder $Root\data"
-# Only Administrators and SYSTEM can read customers' photos and the backups.
+# 5. Settings file and private folders
+Step "Settings file $EnvFile"
+if (Test-Path $EnvFile) {
+  Done "Already exists, left as it is"
+} else {
+  # Signs the login cookie. A new one signs everyone out, which is harmless.
+  $bytes = New-Object byte[] 32
+  [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+  $sessionSecret = -join ($bytes | ForEach-Object { $_.ToString("x2") })
+  @"
+# Instance Cashout settings. Restart after editing: C:\instancecashout\bin\restart.cmd
+PUBLIC_URL=https://$Domain
+
+# Discord app "Instance Cashout": https://discord.com/developers/applications > OAuth2.
+# Redirect to add there: https://$Domain/auth/discord/callback
+DISCORD_CLIENT_ID=1564455712044884038
+DISCORD_CLIENT_SECRET=
+
+SESSION_SECRET=$sessionSecret
+"@ | Set-Content -Path $EnvFile -Encoding ASCII
+  Done "Created. Add the Discord client secret to it."
+}
+# Only Administrators and SYSTEM can read the settings, customers' photos and the backups.
+icacls $EnvFile /inheritance:r /grant:r "*S-1-5-32-544:F" "*S-1-5-18:F" | Out-Null
 icacls "$Root\data" /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" | Out-Null
 Done "Locked to Administrators and SYSTEM"
 
@@ -171,4 +194,4 @@ if ($up) { Done "Running on this server at http://127.0.0.1:$Port" } else { Writ
 
 Write-Host ""
 Write-Host "Setup finished." -ForegroundColor Green
-Write-Host "Open https://$Domain once the Cloudflare hostname is added."
+Write-Host "Next: put the Discord client secret in $EnvFile (notepad $EnvFile), then run $Root\bin\restart.cmd"

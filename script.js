@@ -1,174 +1,41 @@
-const DISCORD_CLIENT_ID = "1564455712044884038";
-const DISCORD_SCOPE = "identify";
-const DISCORD_API_BASE = "https://discord.com/api/v10";
-const SESSION_KEY = "instanceCashoutDiscordSession";
-const TOKEN_KEY = "instanceCashoutDiscordToken";
-const STATE_KEY = "instanceCashoutDiscordState";
-const ACTIVE_ACCOUNT_KEY = "instanceCashoutActiveAccount";
-const ACCOUNT_PREFIX = "instanceCashoutAccount:";
-
+// Discord sign-in runs on the server (/auth/discord); this page never handles a Discord token.
 const loginButton = document.querySelector("#discordLogin");
 const authStatus = document.querySelector("#authStatus");
 
-function makeState() {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function buildDiscordUrl() {
-  const state = makeState();
-  sessionStorage.setItem(STATE_KEY, state);
-
-  const params = new URLSearchParams({
-    response_type: "token",
-    client_id: DISCORD_CLIENT_ID,
-    scope: DISCORD_SCOPE,
-    state,
-    redirect_uri: `${window.location.origin}${window.location.pathname}`,
-    prompt: "consent",
-  });
-
-  return `https://discord.com/oauth2/authorize?${params.toString()}`;
-}
-
-function accountKey(discordId) {
-  return `${ACCOUNT_PREFIX}${discordId}`;
-}
-
-function getDiscordAvatarUrl(user) {
-  if (user.avatar) {
-    return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`;
-  }
-
-  const fallbackIndex = Number(user.discriminator || 0) % 5;
-  return `https://cdn.discordapp.com/embed/avatars/${fallbackIndex}.png`;
-}
-
-function makeHandle(user) {
-  if (user.discriminator && user.discriminator !== "0") {
-    return `${user.username}#${user.discriminator}`;
-  }
-
-  return user.global_name || user.username;
-}
-
-function readDiscordCallback() {
-  if (!window.location.hash.includes("access_token")) {
-    return false;
-  }
-
-  const params = new URLSearchParams(window.location.hash.slice(1));
-  const returnedState = params.get("state");
-  const expectedState = sessionStorage.getItem(STATE_KEY);
-  const accessToken = params.get("access_token");
-
-  if (!returnedState || returnedState !== expectedState || !accessToken) {
-    authStatus.textContent = "Discord login could not be verified. Please try again.";
-    history.replaceState(null, "", window.location.pathname);
-    return false;
-  }
-
-  sessionStorage.setItem(SESSION_KEY, "authenticated");
-  sessionStorage.setItem(TOKEN_KEY, accessToken);
-  sessionStorage.removeItem(STATE_KEY);
-  history.replaceState(null, "", window.location.pathname);
-  return true;
-}
-
-async function fetchDiscordUser(accessToken) {
-  const response = await fetch(`${DISCORD_API_BASE}/users/@me`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error("Discord profile request failed.");
-  }
-
-  return response.json();
-}
-
-function upsertAccount(user) {
-  const now = new Date().toISOString();
-  const saved = localStorage.getItem(accountKey(user.id));
-  const previous = saved ? JSON.parse(saved) : {};
-
-  const account = {
-    id: user.id,
-    username: user.username,
-    displayName: user.global_name || user.username,
-    handle: makeHandle(user),
-    avatarUrl: getDiscordAvatarUrl(user),
-    createdAt: previous.createdAt || now,
-    lastLoginAt: now,
-    quoteDrafts: Array.isArray(previous.quoteDrafts) ? previous.quoteDrafts : [],
-  };
-
-  localStorage.setItem(accountKey(user.id), JSON.stringify(account));
-  localStorage.setItem(ACTIVE_ACCOUNT_KEY, user.id);
-  return account;
-}
+const LOGIN_MESSAGES = {
+  failed: "Discord login couldn't be completed. Please try again.",
+  cancelled: "Discord login was cancelled.",
+  unavailable: "Discord login isn't set up yet. Please try again later.",
+};
 
 function openDashboard() {
   // replace() so Back from the dashboard doesn't land on this page and bounce forward again.
   window.location.replace("dashboard.html");
 }
 
-function createDemoDiscordAccount() {
-  return upsertAccount({
-    id: "demo-discord-user",
-    username: "collector",
-    global_name: "Collector",
-    discriminator: "0",
-    avatar: null,
-  });
-}
-
 async function bootAuthGate() {
-  const hasCallback = readDiscordCallback();
-  const accessToken = sessionStorage.getItem(TOKEN_KEY);
-  const authenticated = hasCallback || sessionStorage.getItem(SESSION_KEY) === "authenticated";
+  const loginResult = new URLSearchParams(window.location.search).get("login");
 
-  if (!authenticated || !accessToken) {
+  if (loginResult) {
+    authStatus.textContent = LOGIN_MESSAGES[loginResult] || LOGIN_MESSAGES.failed;
+    history.replaceState(null, "", window.location.pathname);
     return;
   }
 
   // Already signed in: this page is only the login, so go straight to the dashboard.
-  if (!hasCallback) {
-    openDashboard();
-    return;
-  }
-
-  authStatus.textContent = "Signing you in…";
-
   try {
-    const user = await fetchDiscordUser(accessToken);
-    upsertAccount(user);
-    openDashboard();
+    const response = await fetch("/api/me");
+    if (response.ok) {
+      openDashboard();
+    }
   } catch (error) {
-    sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
-    authStatus.textContent = "Your Discord session expired. Please sign in again.";
+    // Offline: stay on the login page.
   }
 }
 
-function startDiscordLogin() {
+loginButton.addEventListener("click", () => {
   loginButton.classList.add("is-selected");
-
-  if (!DISCORD_CLIENT_ID) {
-    sessionStorage.setItem(SESSION_KEY, "authenticated");
-    sessionStorage.removeItem(TOKEN_KEY);
-    createDemoDiscordAccount();
-    openDashboard();
-    return;
-  }
-
-  window.location.href = buildDiscordUrl();
-}
-
-loginButton.addEventListener("click", startDiscordLogin);
+  window.location.href = "/auth/discord";
+});
 
 bootAuthGate();

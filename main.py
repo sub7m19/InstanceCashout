@@ -3,21 +3,47 @@ import logging
 import logging.handlers
 import os
 import re
+import secrets
 import subprocess
-import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlencode
 
 import requests
-from flask import Flask, abort, jsonify, request, send_from_directory
+from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session
 from waitress import serve
 
 SITE_DIR = Path(__file__).resolve().parent
+
+
+def load_settings_file():
+    """Reads KEY=VALUE lines from the settings file into the environment (real env vars win).
+
+    On the server that's C:\\instancecashout\\instancecashout.env, next to the app folder.
+    """
+    path = Path(os.environ.get("INSTANCE_ENV") or SITE_DIR.parent / "instancecashout.env")
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, sep, value = line.partition("=")
+        if sep and not key.strip().startswith("#"):
+            os.environ.setdefault(key.strip(), value.strip())
+
+
+load_settings_file()
+
 UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", SITE_DIR / "uploads")).resolve()
 DISCORD_API_BASE = "https://discord.com/api/v10"
 
-# Local testing only: lets "Bearer dev:<id>" stand in for a Discord token.
+# Discord sign-in happens on the server (authorization code flow): the browser never sees a
+# Discord token, only our own session cookie.
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/")
+DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID", "")
+DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "")
+DISCORD_REDIRECT_URI = f"{PUBLIC_URL}/auth/discord/callback"
+
+# Local testing only: lets "Bearer dev:<id>" stand in for a signed-in user.
 DEV_AUTH = os.environ.get("INSTANCE_DEV_AUTH") == "1"
 
 MAX_PHOTOS_PER_SET = 8
@@ -44,9 +70,16 @@ VERSION = _version()
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_PHOTOS_PER_SET * len(PHOTO_SETS) * MAX_PHOTO_BYTES + 1024 * 1024
-
-_token_cache = {}
-TOKEN_CACHE_SECONDS = 300
+# Signs the session cookie. Without SESSION_SECRET everyone is signed out on each restart.
+app.secret_key = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
+app.config.update(
+    SESSION_COOKIE_NAME="ic_session",
+    SESSION_COOKIE_HTTPONLY=True,
+    # Lax: sent when Discord redirects back to us, but not on cross-site form posts.
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=PUBLIC_URL.startswith("https://"),
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+)
 
 
 class ApiError(Exception):
@@ -67,38 +100,95 @@ def handle_too_large(_error):
 
 
 def current_user_id():
-    """Resolve the Discord user behind the request's bearer token."""
+    """The signed-in Discord user's id, from the session cookie."""
+    user = session.get("user")
+    if user:
+        return user["id"]
+
     header = request.headers.get("Authorization", "")
-    token = header.removeprefix("Bearer ").strip() if header.startswith("Bearer ") else ""
-
-    if not token:
-        raise ApiError(401, "Log in with Discord to continue.")
-
-    if DEV_AUTH and token.startswith("dev:"):
-        user_id = token.removeprefix("dev:")
+    if DEV_AUTH and header.startswith("Bearer dev:"):
+        user_id = header.removeprefix("Bearer dev:")
         if not user_id.isalnum():
             raise ApiError(401, "Invalid dev token.")
         return user_id
 
-    cached = _token_cache.get(token)
-    if cached and cached[1] > time.time():
-        return cached[0]
+    raise ApiError(401, "Log in with Discord to continue.")
+
+
+@app.get("/auth/discord")
+def discord_login():
+    if not (DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET):
+        return redirect("/?login=unavailable")
+
+    state = secrets.token_urlsafe(24)
+    session["oauth_state"] = state
+    params = urlencode({
+        "client_id": DISCORD_CLIENT_ID,
+        "response_type": "code",
+        "scope": "identify",
+        "redirect_uri": DISCORD_REDIRECT_URI,
+        "state": state,
+    })
+    return redirect(f"https://discord.com/oauth2/authorize?{params}")
+
+
+@app.get("/auth/discord/callback")
+def discord_callback():
+    expected_state = session.pop("oauth_state", None)
+
+    if request.args.get("error"):
+        return redirect("/?login=cancelled")
+    if not expected_state or request.args.get("state") != expected_state or not request.args.get("code"):
+        return redirect("/?login=failed")
 
     try:
-        response = requests.get(
-            f"{DISCORD_API_BASE}/users/@me",
-            headers={"Authorization": f"Bearer {token}"},
+        token_response = requests.post(
+            f"{DISCORD_API_BASE}/oauth2/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": request.args["code"],
+                "redirect_uri": DISCORD_REDIRECT_URI,
+            },
+            auth=(DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET),
             timeout=10,
         )
-    except requests.RequestException:
-        raise ApiError(502, "Couldn't reach Discord to verify your login. Try again.")
+        token_response.raise_for_status()
+        user_response = requests.get(
+            f"{DISCORD_API_BASE}/users/@me",
+            headers={"Authorization": f"Bearer {token_response.json()['access_token']}"},
+            timeout=10,
+        )
+        user_response.raise_for_status()
+        user = user_response.json()
+    except (requests.RequestException, KeyError, ValueError):
+        logging.exception("Discord sign-in failed")
+        return redirect("/?login=failed")
 
-    if response.status_code != 200:
-        raise ApiError(401, "Your Discord login expired. Log in again.")
+    # We only keep the public profile; the Discord token is dropped here.
+    session.clear()
+    session.permanent = True
+    session["user"] = {
+        "id": str(user["id"]),
+        "username": user.get("username", ""),
+        "globalName": user.get("global_name"),
+        "avatar": user.get("avatar"),
+        "discriminator": user.get("discriminator", "0"),
+    }
+    return redirect("/dashboard.html")
 
-    user_id = str(response.json()["id"])
-    _token_cache[token] = (user_id, time.time() + TOKEN_CACHE_SECONDS)
-    return user_id
+
+@app.get("/api/me")
+def me():
+    user = session.get("user")
+    if not user:
+        raise ApiError(401, "Log in with Discord to continue.")
+    return jsonify(user)
+
+
+@app.post("/auth/logout")
+def logout():
+    session.clear()
+    return "", 204
 
 
 def photo_extension(data):

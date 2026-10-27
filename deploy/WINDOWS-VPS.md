@@ -19,14 +19,16 @@ Your time: about 20 minutes.
 
 1. Go to <https://discord.com/developers/applications> → **New Application** → name it `Instance Cashout` → **Create**.
 2. **OAuth2** page:
-   - Copy the **Client ID**.
-   - Under **Redirects**, add both of these and **Save**:
-     - `https://instance-cashout.buffsquad.net/`
-     - `https://instance-cashout.buffsquad.net/index.html`
-3. Paste the Client ID into `script.js` on the first line (`const DISCORD_CLIENT_ID = "...";`),
-   commit and push. (The Client ID isn't a secret; it's fine in the code.)
+   - Under **Redirects**, add `https://instance-cashout.buffsquad.net/auth/discord/callback`
+     (and only that one) and **Save**.
+   - Click **Reset Secret** and copy the **Client Secret**. Part 3 puts it in the settings file
+     on the VPS. Never commit it or share it.
+3. If the Client ID changes (a new Discord app), update `DISCORD_CLIENT_ID` in the settings
+   file and the default in `deploy/windows/setup.ps1`.
 
-No client secret or bot token is needed: the site signs in with Discord in the browser.
+Sign-in runs on the server: Discord sends a one-time code to `/auth/discord/callback`, the
+server trades it for the profile using the secret, and the browser only gets our own session
+cookie. No bot token is needed.
 
 ## Part 2: Cloudflare hostname (about 2 minutes)
 
@@ -53,6 +55,13 @@ Cloudflare's free certificate only covers `<name>.buffsquad.net`.
 
    It installs the app and the scheduled tasks, then prints **Setup finished**.
    It's safe to run again if something stops it.
+4. Open the settings file, paste the Discord client secret after `DISCORD_CLIENT_SECRET=`, save:
+
+   ```powershell
+   notepad C:\instancecashout\instancecashout.env
+   ```
+
+   Then restart: `C:\instancecashout\bin\restart.cmd`
 
 ## Part 4: Check it works
 
