@@ -150,7 +150,8 @@ class CatalogTest(unittest.TestCase):
         return [p["id"] for p in self.client.get("/api/products", headers=MEMBER).get_json()["products"]]
 
     def test_members_see_the_starter_list(self):
-        self.assertEqual(len(self.member_product_ids()), 4)
+        # Every starter product except the one that starts hidden
+        self.assertEqual(len(self.member_product_ids()), len(main.DEFAULT_PRODUCTS) - 1)
 
     def test_only_admins_can_change_products(self):
         self.assertEqual(self.client.get("/api/admin/products", headers=MEMBER).status_code, 403)

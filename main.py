@@ -67,6 +67,18 @@ DEFAULT_PRODUCTS = [
      "upc": "196214111189", "retailer": "Target", "retailPrice": 119.99, "cashout": 330, "quantity": 940},
     {"id": "want-blooming-waters", "name": "Pokemon 151 Blooming Waters Premium Collection", "category": "Sealed",
      "upc": "196214119017", "retailer": "Best Buy", "retailPrice": 59.99, "cashout": 300, "quantity": 4070},
+    # Sample products to try the admin dashboard with (made-up prices; edit or delete freely).
+    {"id": "sample-surging-sparks-etb", "name": "Surging Sparks Elite Trainer Box", "category": "Sealed",
+     "upc": "196214109810", "retailer": "Target", "retailPrice": 49.99, "cashout": 85, "quantity": 300},
+    {"id": "sample-op09-booster-box", "name": "One Piece OP-09 Emperors in the New World Booster Box", "category": "One Piece",
+     "upc": "810059784553", "retailer": "Bandai", "retailPrice": 107.76, "cashout": 165, "quantity": 120},
+    {"id": "sample-op-starter-deck", "name": "One Piece Starter Deck ST-21 Gear 5", "category": "One Piece",
+     "upc": "810059785512", "retailer": "Walmart", "retailPrice": 11.99, "cashout": 18, "quantity": 500},
+    {"id": "sample-charizard-psa10", "name": "Charizard ex 199/165 PSA 10", "category": "Slabs",
+     "upc": "", "retailer": "", "retailPrice": None, "cashout": 650, "quantity": 5},
+    {"id": "sample-journey-together-bundle", "name": "Journey Together Booster Bundle", "category": "Pokemon",
+     "upc": "196214129115", "retailer": "Pokemon Center", "retailPrice": 26.94, "cashout": 40, "quantity": 800,
+     "active": False},
 ]
 
 MAX_PHOTOS_PER_SET = 8
@@ -351,7 +363,7 @@ def now_iso():
 
 def read_products():
     if not PRODUCTS_FILE.is_file():
-        return [{**product, "image": None, "active": True, "updatedAt": now_iso()} for product in DEFAULT_PRODUCTS]
+        return [{"image": None, "active": True, **product, "updatedAt": now_iso()} for product in DEFAULT_PRODUCTS]
     return json.loads(PRODUCTS_FILE.read_text(encoding="utf-8"))
 
 
