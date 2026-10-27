@@ -729,6 +729,8 @@ button {
 .badge-submitted { background: var(--gold-soft); color: var(--gold); }
 .badge-transit { background: var(--blue-soft); color: var(--blue); }
 .badge-paid { background: var(--green-soft); color: var(--green); }
+.badge-received { background: rgba(141, 107, 255, 0.16); color: #b9a5ff; }
+.badge-cancelled { background: rgba(240, 106, 91, 0.14); color: var(--red); }
 
 /* Empty states */
 

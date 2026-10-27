@@ -13,8 +13,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="dashboard.css?v=9">
-    <link rel="stylesheet" href="admin.css?v=2">
+    <link rel="stylesheet" href="dashboard.css?v=10">
+    <link rel="stylesheet" href="admin.css?v=3">
   </head>
   <body>
     <header class="dash-header">
@@ -41,6 +41,14 @@
       </section>
 
       <div id="adminApp" hidden>
+        <div class="tabs admin-tabs" role="tablist" aria-label="Admin sections">
+          <button class="tab" role="tab" id="tab-products" aria-controls="view-products" data-view="products" aria-selected="true">Products</button>
+          <button class="tab" role="tab" id="tab-orders" aria-controls="view-orders" data-view="orders" aria-selected="false">
+            Orders <span class="tab-count" id="openOrdersCount" title="Open orders">0</span>
+          </button>
+        </div>
+
+        <div class="admin-view" id="view-products" role="tabpanel" aria-labelledby="tab-products">
         <section class="admin-head">
           <div>
             <p class="label">Buy list</p>
@@ -129,6 +137,75 @@
           <div id="tableMessage"></div>
         </section>
         <p class="admin-hint">Tip: change a cashout or quantity right in the table, and press Enter to save it.</p>
+        </div>
+
+        <div class="admin-view" id="view-orders" role="tabpanel" aria-labelledby="tab-orders" hidden>
+          <section class="admin-head">
+            <div>
+              <p class="label">Sell orders</p>
+              <h1>Orders</h1>
+              <p>Every order members submit: who's sending it, what's in it, and where it is.</p>
+            </div>
+            <button class="btn btn-secondary" type="button" id="refreshOrders">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>
+              Refresh
+            </button>
+          </section>
+
+          <section class="kpis" aria-label="Order totals">
+            <button class="card kpi kpi-button" type="button" data-order-filter="submitted" style="--tone: var(--gold); --tone-soft: var(--gold-soft)">
+              <span class="stat-icon" aria-hidden="true">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+              </span>
+              <span class="stat-text"><span class="label">Needs tracking</span><strong id="kpiSubmitted">–</strong><small id="kpiSubmittedValue"></small></span>
+            </button>
+            <button class="card kpi kpi-button" type="button" data-order-filter="transit" style="--tone: var(--blue); --tone-soft: var(--blue-soft)">
+              <span class="stat-icon" aria-hidden="true">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.5"/><circle cx="17" cy="17.5" r="1.5"/></svg>
+              </span>
+              <span class="stat-text"><span class="label">In transit</span><strong id="kpiTransit">–</strong><small id="kpiTransitValue"></small></span>
+            </button>
+            <button class="card kpi kpi-button" type="button" data-order-filter="received" style="--tone: #b9a5ff; --tone-soft: rgba(141, 107, 255, 0.16)">
+              <span class="stat-icon" aria-hidden="true">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m8 12 3 3 5-6"/></svg>
+              </span>
+              <span class="stat-text"><span class="label">Received, to pay</span><strong id="kpiReceived">–</strong><small id="kpiReceivedValue"></small></span>
+            </button>
+            <button class="card kpi kpi-button" type="button" data-order-filter="paid" style="--tone: var(--green); --tone-soft: var(--green-soft)">
+              <span class="stat-icon" aria-hidden="true">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              </span>
+              <span class="stat-text"><span class="label">Paid</span><strong id="kpiPaid">–</strong><small id="kpiPaidValue"></small></span>
+            </button>
+          </section>
+
+          <section class="toolbar orders-toolbar" aria-label="Filter orders">
+            <label class="field toolbar-search">
+              <span class="visually-hidden">Search orders</span>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input id="orderSearch" type="search" placeholder="Search order, member, tracking, product" autocomplete="off">
+            </label>
+            <div class="chips order-chips" id="orderStatusChips" aria-label="Filter by status"></div>
+          </section>
+
+          <section class="card admin-table-card" aria-live="polite">
+            <table class="data-table admin-table orders-table">
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">Member</th>
+                  <th scope="col">Items</th>
+                  <th scope="col" class="num">Total</th>
+                  <th scope="col">Tracking</th>
+                  <th scope="col">Status</th>
+                  <th scope="col"><span class="visually-hidden">Open</span></th>
+                </tr>
+              </thead>
+              <tbody id="orderRows"></tbody>
+            </table>
+            <div id="ordersMessage"></div>
+          </section>
+        </div>
       </div>
     </main>
 
@@ -250,23 +327,40 @@
       </form>
     </dialog>
 
-    <!-- Delete confirmation -->
+    <!-- Order details -->
+    <dialog class="drawer order-drawer" id="orderDrawer" aria-labelledby="orderDrawerTitle">
+      <div class="drawer-shell">
+        <div class="drawer-head">
+          <div>
+            <p class="label">Order</p>
+            <h2 id="orderDrawerTitle"></h2>
+          </div>
+          <button class="icon-btn" type="button" data-order-close aria-label="Close">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div class="drawer-body order-body" id="orderBody"></div>
+        <div class="drawer-foot" id="orderActions"></div>
+      </div>
+    </dialog>
+
+    <!-- Confirmation (delete product, cancel order) -->
     <dialog class="dialog confirm-dialog" id="confirmDialog" aria-labelledby="confirmTitle" aria-describedby="confirmText">
       <div class="confirm-body">
         <span class="confirm-icon" aria-hidden="true">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>
         </span>
-        <h2 id="confirmTitle">Delete this product?</h2>
+        <h2 id="confirmTitle"></h2>
         <p id="confirmText"></p>
       </div>
       <div class="dialog-foot">
         <button class="btn btn-secondary" type="button" id="confirmCancel">Cancel</button>
-        <button class="btn btn-danger" type="button" id="confirmDelete">Delete product</button>
+        <button class="btn btn-danger" type="button" id="confirmAction"></button>
       </div>
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="admin.js?v=1"></script>
+    <script src="admin.js?v=3"></script>
   </body>
 </html>

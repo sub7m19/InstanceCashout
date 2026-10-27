@@ -36,7 +36,7 @@ let pendingFile = null; // image chosen but not uploaded yet
 let pendingFileUrl = "";
 let imageRemoved = false;
 let savedSnapshot = "";
-let pendingDelete = null;
+let confirmHandler = null;
 let toastTimer = null;
 
 /* Helpers */
@@ -49,7 +49,7 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function formatMoney(value, cents = false) {
+function formatMoney(value, cents = !Number.isInteger(Math.round(Number(value) * 100) / 100)) {
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: "USD",
@@ -455,9 +455,9 @@ sortSelect.addEventListener("change", () => {
 // "/" jumps to search, like most admin tools.
 document.addEventListener("keydown", (event) => {
   const typing = event.target.closest("input, select, textarea");
-  if (event.key === "/" && !typing && !drawer.open && !confirmDialog.open) {
+  if (event.key === "/" && !typing && !drawer.open && !orderDrawer.open && !confirmDialog.open) {
     event.preventDefault();
-    searchInput.focus();
+    (currentView === "orders" ? orderSearch : searchInput).focus();
   }
 });
 
@@ -795,37 +795,50 @@ drawer.addEventListener("close", () => setPendingFile(null));
 
 $("#deleteFromDrawer").addEventListener("click", () => askDelete(editing));
 
-/* Delete */
+/* Confirmation */
 
-function askDelete(product) {
-  pendingDelete = product;
-  $("#confirmText").textContent = `"${product.name}" will be removed from the buy list for all members. This can't be undone.`;
+function askConfirm({ title, text, action, run }) {
+  $("#confirmTitle").textContent = title;
+  $("#confirmText").textContent = text;
+  $("#confirmAction").textContent = action;
+  confirmHandler = run;
   confirmDialog.showModal();
   $("#confirmCancel").focus();
 }
 
 $("#confirmCancel").addEventListener("click", () => confirmDialog.close());
 
-$("#confirmDelete").addEventListener("click", async () => {
-  const product = pendingDelete;
-  const button = $("#confirmDelete");
+$("#confirmAction").addEventListener("click", async () => {
+  const button = $("#confirmAction");
+  const label = button.textContent;
   button.disabled = true;
-  button.textContent = "Deleting…";
+  button.textContent = "Working…";
 
   try {
-    await api("DELETE", `/api/admin/products/${encodeURIComponent(product.id)}`);
-    products = products.filter((entry) => entry.id !== product.id);
+    await confirmHandler();
     confirmDialog.close();
-    if (drawer.open) drawer.close();
-    render();
-    showToast(`${product.name} deleted.`);
   } catch (error) {
     showToast(error.message, true);
   } finally {
     button.disabled = false;
-    button.textContent = "Delete product";
+    button.textContent = label;
   }
 });
+
+function askDelete(product) {
+  askConfirm({
+    title: "Delete this product?",
+    text: `"${product.name}" will be removed from the buy list for all members. This can't be undone.`,
+    action: "Delete product",
+    run: async () => {
+      await api("DELETE", `/api/admin/products/${encodeURIComponent(product.id)}`);
+      products = products.filter((entry) => entry.id !== product.id);
+      if (drawer.open) drawer.close();
+      render();
+      showToast(`${product.name} deleted.`);
+    },
+  });
+}
 
 /* New product, log out, start */
 
@@ -867,7 +880,424 @@ async function start() {
   }
 
   $("#adminApp").hidden = false;
-  await loadProducts();
+  showView(location.hash === "#orders" ? "orders" : "products");
+  await Promise.all([loadProducts(), loadOrders()]);
 }
+
+/* Views: Products | Orders */
+
+const orderRows = $("#orderRows");
+const ordersMessage = $("#ordersMessage");
+const orderSearch = $("#orderSearch");
+const orderStatusChips = $("#orderStatusChips");
+const orderDrawer = $("#orderDrawer");
+
+let currentView = "products";
+let orders = [];
+let ordersState = "loading";
+let orderFilter = { search: "", status: "open" };
+let openOrderId = null;
+
+function showView(view) {
+  currentView = view;
+  document.querySelectorAll(".admin-tabs [data-view]").forEach((tab) => {
+    tab.setAttribute("aria-selected", String(tab.dataset.view === view));
+  });
+  $("#view-products").hidden = view !== "products";
+  $("#view-orders").hidden = view !== "orders";
+  history.replaceState(null, "", view === "orders" ? "#orders" : location.pathname);
+}
+
+$(".admin-tabs").addEventListener("click", (event) => {
+  const tab = event.target.closest("[data-view]");
+  if (tab) showView(tab.dataset.view);
+});
+
+/* Orders */
+
+const ORDER_STATUS = {
+  submitted: { label: "Needs tracking", badge: "badge-submitted" },
+  transit: { label: "In transit", badge: "badge-transit" },
+  received: { label: "Received", badge: "badge-received" },
+  paid: { label: "Paid", badge: "badge-paid" },
+  cancelled: { label: "Cancelled", badge: "badge-cancelled" },
+};
+
+// How each status change reads in an order's history.
+const HISTORY_LABELS = {
+  submitted: "Order submitted",
+  transit: "Tracking added",
+  received: "Marked received",
+  paid: "Marked paid",
+  cancelled: "Cancelled",
+};
+
+const ORDER_FILTERS = [
+  ["open", "Open"],
+  ["all", "All"],
+  ["submitted", "Needs tracking"],
+  ["transit", "In transit"],
+  ["received", "Received"],
+  ["paid", "Paid"],
+  ["cancelled", "Cancelled"],
+];
+
+const TRACKING_URLS = {
+  UPS: "https://www.ups.com/track?tracknum=",
+  USPS: "https://tools.usps.com/go/TrackConfirmAction?tLabels=",
+  FedEx: "https://www.fedex.com/fedextrack/?trknbr=",
+};
+
+const isOpen = (order) => order.status !== "paid" && order.status !== "cancelled";
+const units = (order) => order.items.reduce((sum, item) => sum + item.quantity, 0);
+
+function statusBadge(status) {
+  const info = ORDER_STATUS[status] || ORDER_STATUS.submitted;
+  return `<span class="badge ${info.badge}">${info.label}</span>`;
+}
+
+function formatDate(value, withTime = true) {
+  return value
+    ? new Intl.DateTimeFormat(undefined, withTime ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" }).format(new Date(value))
+    : "—";
+}
+
+function sellerName(seller) {
+  return seller.globalName || seller.username || seller.id;
+}
+
+function avatarUrl(seller) {
+  if (seller.avatar) {
+    return `https://cdn.discordapp.com/avatars/${seller.id}/${seller.avatar}.png?size=64`;
+  }
+  let index = 0;
+  try {
+    index = Number((BigInt(seller.id) >> 22n) % 6n);
+  } catch (error) {
+    // Not a Discord id (local testing)
+  }
+  return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
+}
+
+function trackingLink(order) {
+  if (!order.tracking) {
+    return `<span class="muted">Waiting for member</span>`;
+  }
+  const base = TRACKING_URLS[order.carrier];
+  const number = escapeHtml(order.tracking);
+  const link = base
+    ? `<a class="tracking-link mono" href="${base}${encodeURIComponent(order.tracking)}" target="_blank" rel="noopener">${number}</a>`
+    : `<span class="mono">${number}</span>`;
+  return `${link}<small>${escapeHtml(order.carrier)}</small>`;
+}
+
+function visibleOrders() {
+  const search = orderFilter.search.trim().toLowerCase();
+  return orders.filter((order) => {
+    if (orderFilter.status === "open" && !isOpen(order)) return false;
+    if (!["open", "all"].includes(orderFilter.status) && order.status !== orderFilter.status) return false;
+    if (!search) return true;
+    const haystack = [
+      order.id, order.tracking, order.seller.id, order.seller.username, order.seller.globalName,
+      ...order.items.map((item) => item.name),
+    ].join(" ").toLowerCase();
+    return haystack.includes(search);
+  });
+}
+
+function renderOrderKpis() {
+  for (const status of ["submitted", "transit", "received", "paid"]) {
+    const matching = orders.filter((order) => order.status === status);
+    const key = status[0].toUpperCase() + status.slice(1);
+    $(`#kpi${key}`).textContent = matching.length;
+    $(`#kpi${key}Value`).textContent = matching.length ? formatMoney(matching.reduce((sum, order) => sum + order.total, 0)) : "";
+  }
+  const open = orders.filter(isOpen).length;
+  $("#openOrdersCount").textContent = open;
+  $("#openOrdersCount").hidden = !open;
+
+  const counts = (key) => {
+    if (key === "all") return orders.length;
+    if (key === "open") return open;
+    return orders.filter((order) => order.status === key).length;
+  };
+  orderStatusChips.innerHTML = ORDER_FILTERS.map(([key, label]) => `
+    <button class="chip" type="button" data-status="${key}" aria-pressed="${orderFilter.status === key}">
+      ${label}<span>${counts(key)}</span>
+    </button>`).join("");
+}
+
+function orderRowHtml(order, index) {
+  const first = order.items[0];
+  const more = order.items.length > 1 ? ` + ${order.items.length - 1} more` : "";
+
+  return `
+    <tr data-order="${escapeHtml(order.id)}" style="--row: ${index}" tabindex="0" aria-label="Open ${escapeHtml(order.id)}">
+      <td class="order-id-td"><strong class="mono">${escapeHtml(order.id)}</strong><small>${formatDate(order.createdAt)}</small></td>
+      <td class="member-td">
+        <div class="member-cell">
+          <img class="avatar" src="${escapeHtml(avatarUrl(order.seller))}" alt="" loading="lazy">
+          <div><strong>${escapeHtml(sellerName(order.seller))}</strong><small>@${escapeHtml(order.seller.username || order.seller.id)}</small></div>
+        </div>
+      </td>
+      <td class="items-td"><span class="items-name">${escapeHtml(first?.name || "")}${escapeHtml(more)}</span><small>${units(order)} units</small></td>
+      <td class="num total-td"><strong>${formatMoney(order.total)}</strong></td>
+      <td class="tracking-td">${trackingLink(order)}</td>
+      <td class="status-td">${statusBadge(order.status)}</td>
+      <td class="open-td">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </td>
+    </tr>`;
+}
+
+function renderOrders() {
+  renderOrderKpis();
+
+  if (ordersState !== "ready") {
+    orderRows.innerHTML = "";
+    ordersMessage.innerHTML = ordersState === "loading"
+      ? `<div class="empty"><p>Loading orders…</p></div>`
+      : `<div class="empty"><h3>Couldn't load orders</h3><p>Check your connection and try again.</p>
+          <button class="btn btn-secondary" type="button" id="retryOrders">Try again</button></div>`;
+    return;
+  }
+
+  const rows = visibleOrders();
+  orderRows.innerHTML = rows.map(orderRowHtml).join("");
+
+  if (rows.length) {
+    ordersMessage.innerHTML = "";
+  } else if (orders.length) {
+    ordersMessage.innerHTML = `<div class="empty"><h3>No orders here</h3><p>Nothing matches this search or status.</p>
+      <button class="btn btn-secondary" type="button" id="showAllOrders">Show all orders</button></div>`;
+  } else {
+    ordersMessage.innerHTML = `<div class="empty"><h3>No orders yet</h3><p>When members submit sell orders, they show up here.</p></div>`;
+  }
+}
+
+async function loadOrders() {
+  try {
+    orders = (await api("GET", "/api/admin/orders")).orders;
+    ordersState = "ready";
+  } catch (error) {
+    ordersState = "error";
+  }
+  renderOrders();
+
+  if (openOrderId && orderDrawer.open) {
+    renderOrderDrawer();
+  }
+}
+
+orderSearch.addEventListener("input", () => {
+  orderFilter.search = orderSearch.value;
+  renderOrders();
+});
+
+orderStatusChips.addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-status]");
+  if (chip) {
+    orderFilter.status = chip.dataset.status;
+    renderOrders();
+  }
+});
+
+document.querySelectorAll("[data-order-filter]").forEach((card) =>
+  card.addEventListener("click", () => {
+    orderFilter.status = card.dataset.orderFilter;
+    renderOrders();
+  }),
+);
+
+ordersMessage.addEventListener("click", (event) => {
+  if (event.target.closest("#retryOrders")) {
+    ordersState = "loading";
+    renderOrders();
+    loadOrders();
+  } else if (event.target.closest("#showAllOrders")) {
+    orderFilter = { search: "", status: "all" };
+    orderSearch.value = "";
+    renderOrders();
+  }
+});
+
+$("#refreshOrders").addEventListener("click", async () => {
+  await loadOrders();
+  showToast("Orders refreshed.");
+});
+
+orderRows.addEventListener("click", (event) => {
+  const row = event.target.closest("tr[data-order]");
+  // Let the tracking link open the carrier's page without opening the drawer.
+  if (row && !event.target.closest("a")) openOrder(row.dataset.order);
+});
+
+orderRows.addEventListener("keydown", (event) => {
+  const row = event.target.closest("tr[data-order]");
+  if (row && (event.key === "Enter" || event.key === " ") && event.target === row) {
+    event.preventDefault();
+    openOrder(row.dataset.order);
+  }
+});
+
+/* Order drawer */
+
+// The next step for each status, and what "Reopen" goes back to after a cancel.
+const NEXT_STEP = {
+  submitted: { status: "received", label: "Mark received" },
+  transit: { status: "received", label: "Mark received" },
+  received: { status: "paid", label: "Mark paid" },
+};
+
+function openOrder(orderId) {
+  openOrderId = orderId;
+  renderOrderDrawer();
+  orderDrawer.showModal();
+}
+
+function renderOrderDrawer() {
+  const order = orders.find((entry) => entry.id === openOrderId);
+  if (!order) return;
+
+  $("#orderDrawerTitle").innerHTML = `${escapeHtml(order.id)} ${statusBadge(order.status)}`;
+
+  const photos = order.photos || { before: [], after: [] };
+  const photoTiles = (set) => photos[set].map((name) => {
+    const url = `/api/admin/orders/${encodeURIComponent(order.id)}/photos/${encodeURIComponent(name)}`;
+    return `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${set === "before" ? "Before" : "After"} packing photo" loading="lazy"></a>`;
+  }).join("");
+
+  const history = (order.history || []).slice().reverse().map((entry) => `
+    <li>
+      <strong>${HISTORY_LABELS[entry.status] || entry.status}</strong>
+      <span>${formatDate(entry.at)}</span>
+      <small>by ${escapeHtml(entry.by || "—")}</small>
+    </li>`).join("");
+
+  $("#orderBody").innerHTML = `
+    <div class="order-main">
+      <section class="order-section">
+        <h3 class="label">Sending it</h3>
+        <div class="member-card">
+          <img class="avatar avatar-lg" src="${escapeHtml(avatarUrl(order.seller))}" alt="">
+          <div>
+            <strong>${escapeHtml(sellerName(order.seller))}</strong>
+            <small>@${escapeHtml(order.seller.username || order.seller.id)}</small>
+            <button class="copy-id mono" type="button" data-copy="${escapeHtml(order.seller.id)}" title="Copy Discord ID">
+              ID ${escapeHtml(order.seller.id)}
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="order-section">
+        <h3 class="label">Items</h3>
+        <ul class="order-items">
+          ${order.items.map((item) => `
+            <li>
+              <span><strong>${escapeHtml(item.name)}</strong><small>${item.quantity} × ${formatMoney(item.cashout)}</small></span>
+              <span class="mono">${formatMoney(item.quantity * item.cashout)}</span>
+            </li>`).join("")}
+        </ul>
+        <p class="order-total">Total cashout <strong>${formatMoney(order.total)}</strong></p>
+      </section>
+
+      <section class="order-section">
+        <h3 class="label">Shipping</h3>
+        ${order.tracking
+          ? `<dl class="ship-facts">
+              <div><dt>Carrier</dt><dd>${escapeHtml(order.carrier)}</dd></div>
+              <div><dt>Tracking</dt><dd>${trackingLink(order)}</dd></div>
+              <div><dt>Shipped</dt><dd>${formatDate(order.shippedAt)}</dd></div>
+            </dl>
+            <p class="photo-set-label">Before packing</p>
+            <div class="order-photos">${photoTiles("before") || `<span class="muted">No photos</span>`}</div>
+            <p class="photo-set-label">After packing</p>
+            <div class="order-photos">${photoTiles("after") || `<span class="muted">No photos</span>`}</div>`
+          : `<p class="muted">The member hasn't added tracking and photos yet.</p>`}
+      </section>
+    </div>
+
+    <aside class="order-section order-timeline">
+      <h3 class="label">History</h3>
+      <ol class="timeline">${history}</ol>
+    </aside>`;
+
+  const next = NEXT_STEP[order.status];
+  const actions = [];
+  if (isOpen(order)) {
+    actions.push(`<button class="btn btn-danger-ghost" type="button" data-order-status="cancelled">Cancel order</button>`);
+  }
+  if (order.status === "cancelled") {
+    actions.push(`<button class="btn btn-secondary" type="button" data-order-reopen>Reopen</button>`);
+  }
+  actions.push(`<span class="spacer"></span>`);
+  if (order.status === "submitted") {
+    actions.push(`<span class="muted foot-note">Waiting for tracking from the member</span>`);
+  }
+  if (next) {
+    actions.push(`<button class="btn btn-primary" type="button" data-order-status="${next.status}">${next.label}</button>`);
+  }
+  $("#orderActions").innerHTML = actions.join("");
+}
+
+async function setOrderStatus(order, status) {
+  const updated = await api("PATCH", `/api/admin/orders/${encodeURIComponent(order.id)}`, { status });
+  orders = orders.map((entry) => (entry.id === updated.id ? updated : entry));
+  renderOrders();
+  renderOrderDrawer();
+  showToast(`${updated.id}: ${ORDER_STATUS[status].label.toLowerCase()}.`);
+}
+
+$("#orderActions").addEventListener("click", async (event) => {
+  const order = orders.find((entry) => entry.id === openOrderId);
+  const button = event.target.closest("[data-order-status], [data-order-reopen]");
+  if (!order || !button) return;
+
+  if (button.dataset.orderStatus === "cancelled") {
+    askConfirm({
+      title: `Cancel ${order.id}?`,
+      text: `${sellerName(order.seller)}'s order for ${formatMoney(order.total)} will be marked cancelled. You can reopen it later.`,
+      action: "Cancel order",
+      run: () => setOrderStatus(order, "cancelled"),
+    });
+    return;
+  }
+
+  // Reopen goes back to the last status before the cancel.
+  const status = button.dataset.orderStatus
+    || [...(order.history || [])].reverse().find((entry) => entry.status !== "cancelled")?.status
+    || "submitted";
+
+  button.disabled = true;
+  try {
+    await setOrderStatus(order, status);
+  } catch (error) {
+    showToast(error.message, true);
+    button.disabled = false;
+  }
+});
+
+$("#orderBody").addEventListener("click", async (event) => {
+  const copy = event.target.closest("[data-copy]");
+  if (!copy) return;
+  try {
+    await navigator.clipboard.writeText(copy.dataset.copy);
+    showToast("Discord ID copied.");
+  } catch (error) {
+    showToast("Couldn't copy. Select the ID and copy it instead.", true);
+  }
+});
+
+orderDrawer.addEventListener("click", (event) => {
+  if (event.target.closest("[data-order-close]") || event.target === orderDrawer) {
+    orderDrawer.close();
+  }
+});
+
+orderDrawer.addEventListener("close", () => {
+  openOrderId = null;
+});
 
 start();

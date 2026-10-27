@@ -248,27 +248,108 @@ def photo_extension(data):
     return None
 
 
+# Orders: members sell from the buy list, then ship with photos and tracking. Admins see every
+# order, move it along (received, paid) and can cancel it. Stored with the uploads like the catalog.
+
+ORDERS_FILE = UPLOAD_DIR / "_orders" / "orders.json"
+ORDER_STATUSES = ("submitted", "transit", "received", "paid", "cancelled")
+MAX_ORDER_LINES = 50
+_orders_lock = threading.Lock()
+
+
+def read_orders():
+    if not ORDERS_FILE.is_file():
+        return []
+    return json.loads(ORDERS_FILE.read_text(encoding="utf-8"))
+
+
+def find_order(orders, order_id, user_id=None):
+    for order in orders:
+        if order["id"] == order_id and (user_id is None or order["userId"] == user_id):
+            return order
+    raise ApiError(404, "Order not found.")
+
+
+def current_profile():
+    """The signed-in user's public Discord profile, as stored on their orders."""
+    user = session.get("user")
+    if user:
+        return {key: user.get(key) for key in ("id", "username", "globalName", "avatar")}
+    user_id = current_user_id()  # dev token in tests
+    return {"id": user_id, "username": user_id, "globalName": None, "avatar": None}
+
+
+def display_name(profile):
+    return profile.get("globalName") or profile.get("username") or profile.get("id")
+
+
+def add_history(order, status, by):
+    order["status"] = status
+    order.setdefault("history", []).append({"status": status, "at": now_iso(), "by": by})
+
+
+@app.get("/api/orders")
+def list_my_orders():
+    user_id = current_user_id()
+    return jsonify(orders=[order for order in read_orders() if order["userId"] == user_id])
+
+
+@app.post("/api/orders")
+def create_order():
+    profile = current_profile()
+    lines = (request.get_json(silent=True) or {}).get("items")
+    if not isinstance(lines, list) or not lines or len(lines) > MAX_ORDER_LINES:
+        raise ApiError(400, "Add at least one item to your order.")
+
+    # Prices come from the buy list, never from the browser.
+    catalog = {product["id"]: product for product in read_products() if product.get("active", True)}
+    quantities = {}
+    for line in lines:
+        product = catalog.get(str((line or {}).get("id")))
+        if not product:
+            raise ApiError(409, "An item in your order is no longer on the buy list. Refresh and try again.")
+        try:
+            quantity = int(line.get("quantity"))
+        except (TypeError, ValueError):
+            raise ApiError(400, "Quantities must be whole numbers.")
+        quantities[product["id"]] = quantities.get(product["id"], 0) + quantity
+
+    items = []
+    for product_id, quantity in quantities.items():
+        product = catalog[product_id]
+        if quantity < 1 or quantity > product["quantity"]:
+            raise ApiError(400, f"We're buying up to {product['quantity']} of {product['name']}.")
+        items.append({"productId": product_id, "name": product["name"], "cashout": product["cashout"], "quantity": quantity})
+
+    with _orders_lock:
+        orders = read_orders()
+        number = max((int(order["id"].removeprefix("ORD-")) for order in orders), default=0) + 1
+        order = {
+            "id": f"ORD-{number:05d}",
+            "userId": profile["id"],
+            "seller": profile,
+            "items": items,
+            "total": round(sum(item["cashout"] * item["quantity"] for item in items), 2),
+            "createdAt": now_iso(),
+        }
+        add_history(order, "submitted", display_name(profile))
+        orders.insert(0, order)
+        write_json_atomic(ORDERS_FILE, orders)
+    return jsonify(order), 201
+
+
 def shipment_dir(user_id, order_id):
     if not ORDER_ID_PATTERN.match(order_id):
         raise ApiError(400, "Unknown order.")
     return UPLOAD_DIR / user_id / order_id
 
 
-def read_shipment(folder):
-    meta_path = folder / "shipment.json"
-    if not meta_path.is_file():
-        raise ApiError(404, "No shipment for this order.")
-    return json.loads(meta_path.read_text(encoding="utf-8"))
-
-
 @app.post("/api/shipments")
 def create_shipment():
-    user_id = current_user_id()
+    profile = current_profile()
+    user_id = profile["id"]
     order_id = request.form.get("orderId", "")
     folder = shipment_dir(user_id, order_id)
-
-    if (folder / "shipment.json").exists():
-        raise ApiError(409, "Tracking was already submitted for this order.")
 
     carrier = request.form.get("carrier", "")
     tracking = re.sub(r"\s+", "", request.form.get("tracking", "")).upper()
@@ -277,11 +358,6 @@ def create_shipment():
         raise ApiError(400, "Choose a carrier.")
     if not TRACKING_PATTERN.match(tracking):
         raise ApiError(400, "Enter a valid tracking number.")
-
-    try:
-        order = json.loads(request.form.get("order", "{}"))
-    except json.JSONDecodeError:
-        raise ApiError(400, "Order details are malformed.")
 
     # Validate every file before writing anything, so a bad photo never leaves a half-saved shipment.
     accepted = {}
@@ -302,54 +378,66 @@ def create_shipment():
                 raise ApiError(400, "Photos must be JPEG, PNG, or WebP images.")
             accepted[photo_set].append((f"{photo_set}-{uuid.uuid4().hex}.{extension}", data))
 
-    folder.mkdir(parents=True, exist_ok=True)
-    photos = {}
-    for photo_set, entries in accepted.items():
-        photos[photo_set] = []
-        for name, data in entries:
-            (folder / name).write_bytes(data)
-            photos[photo_set].append(name)
+    with _orders_lock:
+        orders = read_orders()
+        order = find_order(orders, order_id, user_id)
+        if order["status"] != "submitted":
+            raise ApiError(409, "Tracking was already submitted for this order.")
 
-    shipment = {
-        "orderId": order_id,
-        "userId": user_id,
-        "carrier": carrier,
-        "tracking": tracking,
-        "photos": photos,
-        "order": {
-            "items": order.get("items", []),
-            "total": order.get("total"),
-            "createdAt": order.get("createdAt"),
-        },
-        "submittedAt": datetime.now(timezone.utc).isoformat(),
-    }
-    (folder / "shipment.json").write_text(json.dumps(shipment, indent=2), encoding="utf-8")
+        folder.mkdir(parents=True, exist_ok=True)
+        photos = {}
+        for photo_set, entries in accepted.items():
+            photos[photo_set] = []
+            for name, data in entries:
+                (folder / name).write_bytes(data)
+                photos[photo_set].append(name)
 
-    return jsonify(shipment), 201
+        order.update(carrier=carrier, tracking=tracking, photos=photos, shippedAt=now_iso())
+        add_history(order, "transit", display_name(profile))
+        write_json_atomic(ORDERS_FILE, orders)
+    return jsonify(order), 201
 
 
-@app.get("/api/shipments")
-def list_shipments():
-    user_folder = UPLOAD_DIR / current_user_id()
-    shipments = []
-
-    if user_folder.is_dir():
-        for meta_path in sorted(user_folder.glob("ORD-*/shipment.json")):
-            shipments.append(json.loads(meta_path.read_text(encoding="utf-8")))
-
-    return jsonify(shipments=shipments)
+def send_order_photo(order, name):
+    folder = shipment_dir(order["userId"], order["id"])
+    if not PHOTO_NAME_PATTERN.match(name) or not (folder / name).is_file():
+        raise ApiError(404, "Photo not found.")
+    response = send_from_directory(folder, name)
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return response
 
 
 @app.get("/api/shipments/<order_id>/photos/<name>")
 def shipment_photo(order_id, name):
-    folder = shipment_dir(current_user_id(), order_id)
+    return send_order_photo(find_order(read_orders(), order_id, current_user_id()), name)
 
-    if not PHOTO_NAME_PATTERN.match(name) or not (folder / name).is_file():
-        raise ApiError(404, "Photo not found.")
 
-    response = send_from_directory(folder, name)
-    response.headers["Cache-Control"] = "private, max-age=3600"
-    return response
+@app.get("/api/admin/orders")
+def admin_list_orders():
+    require_admin()
+    return jsonify(orders=read_orders(), statuses=ORDER_STATUSES)
+
+
+@app.patch("/api/admin/orders/<order_id>")
+def admin_update_order(order_id):
+    require_admin()
+    status = (request.get_json(silent=True) or {}).get("status")
+    if status not in ORDER_STATUSES:
+        raise ApiError(400, "Choose a valid status.")
+
+    with _orders_lock:
+        orders = read_orders()
+        order = find_order(orders, order_id)
+        if order["status"] != status:
+            add_history(order, status, display_name(current_profile()))
+            write_json_atomic(ORDERS_FILE, orders)
+    return jsonify(order)
+
+
+@app.get("/api/admin/orders/<order_id>/photos/<name>")
+def admin_order_photo(order_id, name):
+    require_admin()
+    return send_order_photo(find_order(read_orders(), order_id), name)
 
 
 # Product catalog
@@ -367,12 +455,16 @@ def read_products():
     return json.loads(PRODUCTS_FILE.read_text(encoding="utf-8"))
 
 
+def write_json_atomic(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Write then rename, so a crash mid-write never leaves a half-written file.
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    os.replace(temp, path)
+
+
 def write_products(products):
-    CATALOG_DIR.mkdir(parents=True, exist_ok=True)
-    # Write then rename, so a crash mid-write never leaves a half-written catalog.
-    temp = PRODUCTS_FILE.with_suffix(".tmp")
-    temp.write_text(json.dumps(products, indent=2), encoding="utf-8")
-    os.replace(temp, PRODUCTS_FILE)
+    write_json_atomic(PRODUCTS_FILE, products)
 
 
 def find_product(products, product_id):

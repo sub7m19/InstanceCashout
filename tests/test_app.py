@@ -52,29 +52,83 @@ class AppTest(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.status(path), 404)
 
-    def test_shipments_need_login(self):
-        self.assertEqual(self.client.get("/api/shipments").status_code, 401)
+    def test_orders_need_login(self):
+        self.assertEqual(self.client.get("/api/orders").status_code, 401)
 
-    def test_submit_and_list_shipment(self):
-        response = self.client.post("/api/shipments", headers=AUTH, data={
-            "orderId": "ORD-00001",
+
+class OrderTest(unittest.TestCase):
+    def setUp(self):
+        self.client = main.app.test_client()
+        main.PRODUCTS_FILE.unlink(missing_ok=True)
+        main.ORDERS_FILE.unlink(missing_ok=True)
+
+    def status(self, path, headers=None):
+        with self.client.get(path, headers=headers) as response:
+            return response.status_code
+
+    def place_order(self, items, headers=AUTH):
+        return self.client.post("/api/orders", headers=headers, json={"items": items})
+
+    def ship(self, order_id, headers=AUTH):
+        return self.client.post("/api/shipments", headers=headers, data={
+            "orderId": order_id,
             "carrier": "UPS",
             "tracking": "1z 999 aa1",
-            "order": "{}",
             "before": (io.BytesIO(PNG), "before.png"),
             "after": (io.BytesIO(PNG), "after.png"),
         })
+
+    def test_order_total_comes_from_the_buy_list(self):
+        # The browser sends only ids and quantities; a made-up price is ignored.
+        response = self.place_order([{"id": "want-151-mini-tin", "quantity": 2, "cashout": 1_000_000},
+                                     {"id": "want-151-mini-tin", "quantity": 1}])
         self.assertEqual(response.status_code, 201, response.get_json())
-        shipment = response.get_json()
-        self.assertEqual(shipment["tracking"], "1Z999AA1")
+        order = response.get_json()
+        self.assertEqual((order["id"], order["total"], order["status"]), ("ORD-00001", 1470, "submitted"))
+        self.assertEqual(order["items"], [{"productId": "want-151-mini-tin", "name": "Pokemon 151 Mini Tin Collection 10 Pack",
+                                           "cashout": 490, "quantity": 3}])
+        self.assertEqual(self.place_order([{"id": "want-prismatic-etb", "quantity": 1}]).get_json()["id"], "ORD-00002")
 
-        listed = self.client.get("/api/shipments", headers=AUTH).get_json()["shipments"]
-        self.assertEqual([s["orderId"] for s in listed], ["ORD-00001"])
+    def test_rejects_hidden_unknown_and_too_many(self):
+        self.assertEqual(self.place_order([{"id": "sample-journey-together-bundle", "quantity": 1}]).status_code, 409)
+        self.assertEqual(self.place_order([{"id": "nope", "quantity": 1}]).status_code, 409)
+        self.assertEqual(self.place_order([{"id": "sample-charizard-psa10", "quantity": 6}]).status_code, 400)
+        self.assertEqual(self.place_order([]).status_code, 400)
 
-        photo = shipment["photos"]["before"][0]
-        self.assertEqual(self.status(f"/api/shipments/ORD-00001/photos/{photo}", AUTH), 200)
-        # Another user can't see it.
-        self.assertEqual(self.status(f"/api/shipments/ORD-00001/photos/{photo}", {"Authorization": "Bearer dev:456"}), 404)
+    def test_ship_then_admin_moves_it_along(self):
+        order_id = self.place_order([{"id": "want-151-mini-tin", "quantity": 1}]).get_json()["id"]
+
+        # Another member can't ship or see someone else's order.
+        self.assertEqual(self.ship(order_id, {"Authorization": "Bearer dev:456"}).status_code, 404)
+        self.assertEqual(self.client.get("/api/orders", headers={"Authorization": "Bearer dev:456"}).get_json()["orders"], [])
+
+        response = self.ship(order_id)
+        self.assertEqual(response.status_code, 201, response.get_json())
+        shipped = response.get_json()
+        self.assertEqual((shipped["status"], shipped["tracking"], shipped["carrier"]), ("transit", "1Z999AA1", "UPS"))
+        self.assertEqual(self.ship(order_id).status_code, 409)
+
+        photo = shipped["photos"]["before"][0]
+        self.assertEqual(self.status(f"/api/shipments/{order_id}/photos/{photo}", AUTH), 200)
+        self.assertEqual(self.status(f"/api/shipments/{order_id}/photos/{photo}", {"Authorization": "Bearer dev:456"}), 404)
+        self.assertEqual(self.status(f"/api/admin/orders/{order_id}/photos/{photo}", ADMIN), 200)
+
+        # Members can't use the admin endpoints.
+        self.assertEqual(self.client.get("/api/admin/orders", headers=MEMBER).status_code, 403)
+        self.assertEqual(self.client.patch(f"/api/admin/orders/{order_id}", headers=MEMBER, json={"status": "paid"}).status_code, 403)
+
+        admin_view = self.client.get("/api/admin/orders", headers=ADMIN).get_json()["orders"][0]
+        self.assertEqual((admin_view["seller"]["id"], admin_view["tracking"]), ("123", "1Z999AA1"))
+
+        self.assertEqual(self.client.patch(f"/api/admin/orders/{order_id}", headers=ADMIN, json={"status": "bogus"}).status_code, 400)
+        for status in ("received", "paid"):
+            updated = self.client.patch(f"/api/admin/orders/{order_id}", headers=ADMIN, json={"status": status}).get_json()
+            self.assertEqual(updated["status"], status)
+        self.assertEqual([entry["status"] for entry in updated["history"]], ["submitted", "transit", "received", "paid"])
+        self.assertEqual(updated["history"][-1]["by"], "900")
+
+        # The member sees the new status.
+        self.assertEqual(self.client.get("/api/orders", headers=AUTH).get_json()["orders"][0]["status"], "paid")
 
 
 
@@ -118,7 +172,7 @@ class DiscordLoginTest(unittest.TestCase):
         me = self.client.get("/api/me").get_json()
         self.assertEqual((me["id"], me["globalName"]), ("42", "BUFFY"))
         self.assertNotIn("t", me.values())  # the Discord token never reaches the browser
-        self.assertEqual(self.client.get("/api/shipments").status_code, 200)
+        self.assertEqual(self.client.get("/api/orders").status_code, 200)
 
         self.client.post("/auth/logout")
         self.assertEqual(self.client.get("/api/me").status_code, 401)

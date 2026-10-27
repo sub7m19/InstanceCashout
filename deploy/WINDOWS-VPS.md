@@ -83,8 +83,12 @@ that to `ADMIN_DISCORD_IDS=` in `C:\instancecashout\instancecashout.env` (comma-
 several people), then run `C:\instancecashout\bin\restart.cmd`. Admins also get an **Admin**
 link in the dashboard header.
 
-The buy list is saved in `C:\instancecashout\data\uploads\_catalog` and included in the
-nightly backup.
+The **Orders** tab lists every sell order: who's sending it, items and total, tracking (linked
+to the carrier) and packing photos. Mark an order received, then paid, or cancel it; each
+change is recorded with who made it, and the member sees the new status on their dashboard.
+
+The buy list is saved in `C:\instancecashout\data\uploads\_catalog` and orders in
+`C:\instancecashout\data\uploads\_orders`; both are in the nightly backup.
 
 ## Day to day
 

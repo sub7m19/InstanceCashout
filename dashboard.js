@@ -42,6 +42,7 @@ const submitOrderButton = $("#submitOrder");
 const toast = $("#toast");
 
 let activeAccount = null;
+let orders = [];
 let wantedItems = [];
 let categories = [];
 let productsState = "loading";
@@ -130,10 +131,12 @@ function formatDate(value) {
 }
 
 function formatMoney(value) {
+  const cents = !Number.isInteger(Math.round(Number(value) * 100) / 100);
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: cents ? 2 : 0,
+    maximumFractionDigits: cents ? 2 : 0,
   }).format(value);
 }
 
@@ -377,8 +380,8 @@ function clampQuantity(value, max) {
   return Math.max(0, Math.min(number, max || Infinity));
 }
 
-function submitOrder() {
-  const { entries, total } = cartSummary();
+async function submitOrder() {
+  const { entries } = cartSummary();
 
   if (!entries.length) {
     return;
@@ -389,22 +392,30 @@ function submitOrder() {
     return;
   }
 
-  activeAccount.orders = Array.isArray(activeAccount.orders) ? activeAccount.orders : [];
-  const order = {
-    id: `ORD-${String(activeAccount.orders.length + 1).padStart(5, "0")}`,
-    items: entries.map(({ item, quantity }) => ({
-      id: item.id,
-      name: item.name,
-      cashout: Number(item.cashout),
-      quantity,
-    })),
-    total,
-    status: "submitted",
-    createdAt: new Date().toISOString(),
-  };
+  submitOrderButton.disabled = true;
+  submitOrderButton.textContent = "Submitting…";
+  let order;
 
-  activeAccount.orders.unshift(order);
-  saveActiveAccount();
+  try {
+    const response = await fetch(`${API_BASE}/api/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: entries.map(({ item, quantity }) => ({ id: item.id, quantity })) }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Couldn't submit your order. Please try again.");
+    }
+    order = data;
+  } catch (error) {
+    showToast(error.message === "Failed to fetch" ? "Couldn't reach the server. Check your connection." : error.message);
+    return;
+  } finally {
+    submitOrderButton.disabled = false;
+    submitOrderButton.textContent = "Submit order";
+  }
+
+  orders.unshift(order);
   cart = {};
   writeJson(CART_KEY, cart);
   orderDialog.close();
@@ -412,17 +423,25 @@ function submitOrder() {
   renderWantedItems();
   renderAccountData();
   activateTab("orders");
-  showToast(`${order.id} submitted for ${formatMoney(total)}.`);
+  showToast(`${order.id} submitted for ${formatMoney(order.total)}.`);
 }
 
 /* Account data */
 
-function saveActiveAccount() {
-  return activeAccount ? writeJson(accountKey(activeAccount.id), activeAccount) : false;
+function accountOrders() {
+  return orders;
 }
 
-function accountOrders() {
-  return Array.isArray(activeAccount?.orders) ? activeAccount.orders : [];
+async function loadOrders() {
+  try {
+    const response = await fetch(`${API_BASE}/api/orders`);
+    if (response.ok) {
+      orders = (await response.json()).orders;
+      renderAccountData();
+    }
+  } catch (error) {
+    // Offline: the dashboard still shows the buy list.
+  }
 }
 
 function accountDrafts() {
@@ -455,7 +474,9 @@ const STATUS_LABELS = {
   draft: ["In review", "badge-draft"],
   submitted: ["Needs tracking", "badge-submitted"],
   transit: ["In transit", "badge-transit"],
+  received: ["Received", "badge-received"],
   paid: ["Paid", "badge-paid"],
+  cancelled: ["Cancelled", "badge-cancelled"],
 };
 
 function statusBadge(status) {
@@ -563,10 +584,11 @@ function renderShipments() {
 }
 
 function renderSummary(rows) {
-  const inProgress = rows.filter((row) => row.status !== "paid").reduce((sum, row) => sum + row.value, 0);
+  const open = (row) => row.status !== "paid" && row.status !== "cancelled";
+  const inProgress = rows.filter(open).reduce((sum, row) => sum + row.value, 0);
   const toShip = accountOrders().filter((order) => order.status === "submitted").length;
   const pendingShipment = accountOrders().find((order) => order.status === "submitted");
-  const openOrders = rows.filter((row) => row.status !== "paid").length;
+  const openOrders = rows.filter(open).length;
 
   summaryValue.textContent = formatMoney(inProgress);
   payoutPending.textContent = formatMoney(inProgress);
@@ -576,7 +598,7 @@ function renderSummary(rows) {
 
   // Walk the cashout steps for the newest order so users always know what to do next.
   const latest = accountOrders()[0];
-  const stage = { submitted: 2, transit: 3, paid: 5 }[latest?.status] || 1;
+  const stage = { submitted: 2, transit: 3, received: 4, paid: 5 }[latest?.status] || 1;
 
   cashoutSteps.forEach((step) => {
     const number = Number(step.dataset.step);
@@ -588,6 +610,8 @@ function renderSummary(rows) {
     setStepHint(`Next: photograph and pack ${pendingShipment.id}, ship it with your own label, then add the tracking number under Shipments.`);
   } else if (latest?.status === "transit") {
     setStepHint(`${latest.id} is on the way. We'll verify it as soon as it arrives.`);
+  } else if (latest?.status === "received") {
+    setStepHint(`We received ${latest.id} and are checking it. Your payout comes next.`);
   } else if (accountDrafts().length) {
     setStepHint("Your quote is in review. You can also sell straight from the buy list.");
   } else {
@@ -996,22 +1020,11 @@ function setShipUploading(percent) {
   $("#shipProgress").value = percent ?? 0;
 }
 
-function applyShipment(order, shipment) {
-  Object.assign(order, {
-    carrier: shipment.carrier,
-    tracking: shipment.tracking,
-    photos: shipment.photos,
-    shippedAt: shipment.submittedAt,
-    status: order.status === "submitted" ? "transit" : order.status,
-  });
-}
-
 async function uploadShipment(order, carrier, tracking) {
   const form = new FormData();
   form.append("orderId", order.id);
   form.append("carrier", carrier);
   form.append("tracking", tracking);
-  form.append("order", JSON.stringify({ items: order.items, total: order.total, createdAt: order.createdAt }));
 
   for (const set of ["before", "after"]) {
     for (const [index, dataUrl] of shipPhotos[set].entries()) {
@@ -1042,8 +1055,7 @@ async function uploadShipment(order, carrier, tracking) {
       return;
     }
 
-    applyShipment(order, request.response);
-    saveActiveAccount();
+    orders = orders.map((entry) => (entry.id === order.id ? request.response : entry));
     $("#shipDialog").close();
     renderAccountData();
     showToast(`Photos and tracking submitted for ${order.id}.`);
@@ -1055,32 +1067,6 @@ async function uploadShipment(order, carrier, tracking) {
 
   setShipUploading(0);
   request.send(form);
-}
-
-// Pull shipments saved on the server so tracking shows up on every device the customer uses.
-async function syncShipments() {
-  if (!activeAccount) {
-    return;
-  }
-
-  try {
-    const response = await fetch(`${API_BASE}/api/shipments`);
-    if (!response.ok) {
-      return;
-    }
-
-    const { shipments } = await response.json();
-    shipments.forEach((shipment) => {
-      const order = accountOrders().find((entry) => entry.id === shipment.orderId);
-      if (order && !order.tracking) {
-        applyShipment(order, shipment);
-      }
-    });
-    saveActiveAccount();
-    renderAccountData();
-  } catch (error) {
-    // Offline or no API (e.g. static hosting); local data still renders.
-  }
 }
 
 /* Photo viewer */
@@ -1175,5 +1161,5 @@ loadActiveAccount()
     loadCart();
     renderCart();
     renderWantedItems();
-    syncShipments();
+    loadOrders();
   });
