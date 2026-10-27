@@ -1525,14 +1525,20 @@ button {
     font-size: 1.3rem;
   }
 
-  .steps {
-    gap: 1rem 0;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Keep all four steps on one row; tighten spacing and text to fit */
+  .step {
+    font-size: 0.75rem;
+    padding-right: 0.35rem;
   }
 
-  .step:nth-child(2)::after,
-  .step:nth-child(2)::before {
-    display: none;
+  .step strong {
+    font-size: 0.85rem;
+  }
+
+  .step::after,
+  .step::before {
+    left: 32px;
+    right: 4px;
   }
 
   .sell-controls {

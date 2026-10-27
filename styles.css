@@ -34,8 +34,10 @@ body.auth-locked {
     radial-gradient(circle at 20% 15%, rgba(94, 167, 255, 0.28), transparent 28rem),
     radial-gradient(circle at 80% 30%, rgba(75, 215, 168, 0.24), transparent 24rem),
     #101720;
-  height: 100vh;
-  overflow: hidden;
+  /* At least one screen tall, but free to grow and scroll when the content is taller (phones) */
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
 }
 
 a {
@@ -56,8 +58,9 @@ body.auth-locked .app-shell {
   color: var(--white);
   display: none;
   flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
   padding: 1.15rem 6vw 6vw;
 }
 
