@@ -13,251 +13,345 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101720'/%3E%3Cpath d='M18 14h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6Z' fill='%23f2c14e'/%3E%3Cpath d='M24 10h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6V16a6 6 0 0 1 6-6Z' fill='%234bd7a8'/%3E%3Cpath d='M27 20h16M27 31h20M27 42h12' stroke='%23101720' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
     >
-    <link rel="stylesheet" href="styles.css?v=32">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="dashboard.css?v=4">
   </head>
-  <body class="dashboard-page">
-    <header class="site-header dashboard-header">
-      <a class="brand" href="index.html" aria-label="Instance Cashout home">
-        <span class="text-brand">Instance Cashout</span>
-      </a>
-      <nav aria-label="Dashboard navigation">
-        <a href="index.html">Main site</a>
-        <button class="dashboard-header-button" type="button" data-tab-link="settings">User Settings</button>
-        <button class="logout-button" id="dashboardLogout" type="button">Log out</button>
+  <body>
+    <header class="dash-header">
+      <a class="dash-brand" href="index.html" aria-label="Instance Cashout home">Instance Cashout</a>
+      <nav aria-label="Account">
+        <a class="header-link optional" href="index.html">Main site</a>
+        <button class="header-link" type="button" data-tab-link="settings">Settings</button>
+        <button class="header-link" id="dashboardLogout" type="button">Log out</button>
       </nav>
     </header>
 
-    <main class="dashboard-single" id="dashboard">
-      <section class="dashboard-overview" aria-label="Dashboard overview">
-        <div class="dashboard-heading">
-          <p class="eyebrow">Account dashboard</p>
-          <h1>Welcome back, <span id="dashboardName">collector</span>.</h1>
-        </div>
-
-        <div class="dashboard-profile-card" aria-label="Discord account">
-          <img id="profileAvatar" alt="" class="profile-avatar">
+    <main class="dash-main" id="dashboard">
+      <section class="greeting" aria-label="Account">
+        <div class="greeting-user">
+          <div class="avatar">
+            <span id="profileInitials" aria-hidden="true">IC</span>
+            <img id="profileAvatar" alt="" hidden>
+          </div>
           <div>
-            <strong id="profileName">Discord account</strong>
-            <span id="profileHandle">Not loaded yet</span>
+            <h1>Welcome back, <span id="dashboardName">collector</span></h1>
+            <p id="profileHandle">Sign in with Discord to save orders.</p>
           </div>
         </div>
-
-        <article class="earnings-hero">
-          <div>
-            <p class="panel-kicker">Total Earnings</p>
-            <strong id="dashboardEstimate">$0</strong>
-          </div>
-        </article>
-
-        <div class="metric-grid">
-          <article class="metric-card cyan">
-            <span>Open orders</span>
-            <strong>0</strong>
-          </article>
-          <article class="metric-card gold">
-            <span>Pending quotes</span>
-            <strong id="pendingQuoteCount">0</strong>
-          </article>
-          <article class="metric-card blue">
-            <span>Payout setup</span>
-            <strong>Ready</strong>
-          </article>
-          <article class="metric-card green">
-            <span>Total estimate</span>
-            <strong id="dashboardEstimateSmall">$0</strong>
-          </article>
+        <div class="greeting-actions">
+          <a class="btn btn-secondary" href="index.html#quote">Request a quote</a>
+          <button class="btn btn-primary" type="button" data-tab-link="sell">Sell sealed product</button>
         </div>
       </section>
 
-      <section class="dashboard-workspace" aria-label="Dashboard workspace">
-        <nav class="dashboard-nav" aria-label="Dashboard tabs">
-          <button class="dashboard-tab active" type="button" data-tab="orders">Orders</button>
-          <button class="dashboard-tab" type="button" data-tab="sell">Sell</button>
-          <button class="dashboard-tab" type="button" data-tab="shipments">Shipment and Tracking</button>
-          <button class="dashboard-tab" type="button" data-tab="payouts">Payouts</button>
-        </nav>
+      <section class="card summary" aria-label="Cashout summary">
+        <div>
+          <p class="label">Value in progress</p>
+          <strong class="summary-value" id="summaryValue">$0</strong>
+          <p class="summary-sub" id="summarySub">$0 paid out · $0 ready to withdraw</p>
+        </div>
+        <div>
+          <p class="label">How your cashout works</p>
+          <ol class="steps" id="cashoutSteps">
+            <li class="step" data-step="1"><span class="step-marker" aria-hidden="true"></span><strong>Submit</strong><span>Pick items to sell</span></li>
+            <li class="step" data-step="2"><span class="step-marker" aria-hidden="true"></span><strong>Ship</strong><span>Add photos + tracking</span></li>
+            <li class="step" data-step="3"><span class="step-marker" aria-hidden="true"></span><strong>Verify</strong><span>We check it's sealed</span></li>
+            <li class="step" data-step="4"><span class="step-marker" aria-hidden="true"></span><strong>Get paid</strong><span>Payout released</span></li>
+          </ol>
+          <p class="step-hint" id="stepHint">Start by choosing items from the buy list.</p>
+        </div>
+      </section>
 
-        <div class="dashboard-tabs">
-          <section class="dashboard-tab-panel active" id="ordersPanel" data-panel="orders">
-            <div class="table-heading">
-              <div>
-                <h2>Orders</h2>
-                <p>Quote drafts and cashout orders.</p>
-              </div>
-              <a class="button secondary" href="index.html#quote">New quote</a>
-            </div>
-            <div class="quote-table-wrap">
-              <table class="quote-table">
-                <thead>
-                  <tr>
-                    <th>Draft ID</th>
-                    <th>Estimated value</th>
-                    <th>Card type</th>
-                    <th>Collection size</th>
-                    <th>Created</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody id="quoteHistory">
-                  <tr>
-                    <td colspan="6">No quote drafts yet.</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
+      <section class="stats" aria-label="Order counts">
+        <button class="card stat stat-gold" type="button" data-tab-link="orders">
+          <span class="stat-icon" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+          </span>
+          <span class="stat-text">
+            <span class="label">Open orders</span>
+            <strong id="statOpenOrders">0</strong>
+          </span>
+          <svg class="icon stat-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button class="card stat stat-blue" type="button" data-tab-link="shipments">
+          <span class="stat-icon" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>
+          </span>
+          <span class="stat-text">
+            <span class="label">To ship</span>
+            <strong id="statToShip">0</strong>
+          </span>
+          <svg class="icon stat-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button class="card stat stat-green" type="button" data-tab-link="payouts">
+          <span class="stat-icon" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.5"/><path d="M6 10v5M18 10v5"/></svg>
+          </span>
+          <span class="stat-text">
+            <span class="label">Paid out</span>
+            <strong id="statPaidOut">$0</strong>
+          </span>
+          <svg class="icon stat-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </section>
 
-          <section class="dashboard-tab-panel" id="sellPanel" data-panel="sell">
-            <div class="sell-market">
-              <div class="sell-toolbar">
-                <div>
-                  <h2>Sell</h2>
-                  <p>Upload items you want to buy from users and manage the current buy list.</p>
-                </div>
-                <button class="button primary" type="button" id="openWantedForm">Add wanted item</button>
-              </div>
-
-              <div class="sell-category-row" aria-label="Sell categories">
-                <button class="sell-chip active" type="button" data-category="all">All items <span id="wantedAllCount">0</span></button>
-                <button class="sell-chip" type="button" data-category="Pokemon">Pokemon <span>0</span></button>
-                <button class="sell-chip" type="button" data-category="One Piece">One Piece <span>0</span></button>
-                <button class="sell-chip" type="button" data-category="Sealed">Sealed <span>0</span></button>
-                <button class="sell-chip" type="button" data-category="Slabs">Slabs <span>0</span></button>
-              </div>
-
-              <div class="sell-controls">
-                <label class="sell-search">
-                  <span>Search wanted items</span>
-                  <input id="wantedSearch" type="search" placeholder="Search products...">
-                </label>
-                <label class="sell-sort">
-                  <span>Sort</span>
-                  <select id="wantedSort">
-                    <option value="payout">Highest payout</option>
-                    <option value="name">Name</option>
-                    <option value="quantity">Quantity needed</option>
-                  </select>
-                </label>
-              </div>
-
-              <form class="wanted-form" id="wantedForm" hidden>
-                <div class="wanted-image-field">
-                  <img id="wantedImagePreview" alt="">
-                  <label>
-                    Product image
-                    <input id="wantedImage" name="wantedImage" type="file" accept="image/*">
-                  </label>
-                </div>
-                <label>
-                  Product name
-                  <input id="wantedName" name="wantedName" type="text" placeholder="Example: Pokemon 151 Booster Bundle" required>
-                </label>
-                <label>
-                  Category
-                  <select id="wantedCategory" name="wantedCategory">
-                    <option>Pokemon</option>
-                    <option>One Piece</option>
-                    <option>Sealed</option>
-                    <option>Slabs</option>
-                  </select>
-                </label>
-                <label>
-                  UPC / ID
-                  <input id="wantedUpc" name="wantedUpc" type="text" placeholder="Example: 196214118392">
-                </label>
-                <label>
-                  Retailer
-                  <input id="wantedRetailer" name="wantedRetailer" type="text" placeholder="Example: Pokemon Center">
-                </label>
-                <label>
-                  Buy price
-                  <input id="wantedBuyPrice" name="wantedBuyPrice" type="text" placeholder="Example: $59.99">
-                </label>
-                <label>
-                  Cashout
-                  <input id="wantedCashout" name="wantedCashout" type="number" min="0" step="1" placeholder="Example: 300" required>
-                </label>
-                <label>
-                  Quantity needed
-                  <input id="wantedQuantity" name="wantedQuantity" type="number" min="1" step="1" value="1" required>
-                </label>
-                <div class="wanted-form-actions">
-                  <button class="button primary" type="submit">Save item</button>
-                  <button class="button secondary" type="button" id="cancelWantedForm">Cancel</button>
-                </div>
-              </form>
-
-              <div class="wanted-grid" id="wantedGrid" aria-live="polite"></div>
-            </div>
-          </section>
-
-          <section class="dashboard-tab-panel" id="shipmentsPanel" data-panel="shipments">
-            <div class="tab-panel-grid">
-              <article class="dashboard-panel feature-panel">
-                <p class="panel-kicker">Shipment and Tracking</p>
-                <h2>No shipments pending</h2>
-                <p>Tracking details will appear after a quote is approved.</p>
-              </article>
-              <article class="dashboard-panel status-list">
-                <h2>Shipment steps</h2>
-                <div>
-                  <strong>Label created</strong>
-                  <span>Waiting for an approved order.</span>
-                </div>
-                <div>
-                  <strong>In transit</strong>
-                  <span>No active package is being tracked.</span>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section class="dashboard-tab-panel" id="payoutsPanel" data-panel="payouts">
-            <div class="tab-panel-grid">
-              <article class="dashboard-panel feature-panel">
-                <p class="panel-kicker">Payouts</p>
-                <h2 id="payoutEstimate">$0</h2>
-                <p>Estimated value from saved drafts. Final payout is confirmed after review.</p>
-              </article>
-              <article class="dashboard-panel status-list">
-                <h2>Payout status</h2>
-                <div>
-                  <strong>Method</strong>
-                  <span>Set after first approved order.</span>
-                </div>
-                <div>
-                  <strong>Available balance</strong>
-                  <span>$0 ready to withdraw.</span>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section class="dashboard-tab-panel" id="settingsPanel" data-panel="settings">
-            <article class="dashboard-panel account-panel" id="account">
-              <h2>User Settings</h2>
-              <dl class="account-list">
-                <div>
-                  <dt>Discord ID</dt>
-                  <dd id="accountDiscordId">Pending</dd>
-                </div>
-                <div>
-                  <dt>Account created</dt>
-                  <dd id="accountCreatedAt">Pending</dd>
-                </div>
-                <div>
-                  <dt>Last login</dt>
-                  <dd id="accountLastLogin">Pending</dd>
-                </div>
-              </dl>
-            </article>
-          </section>
+      <section aria-label="Dashboard workspace">
+        <div class="tabs" role="tablist" aria-label="Dashboard sections">
+          <button class="tab" role="tab" id="tab-orders" aria-controls="panel-orders" data-tab="orders">Orders<span class="tab-count" id="ordersTabCount">0</span></button>
+          <button class="tab" role="tab" id="tab-sell" aria-controls="panel-sell" data-tab="sell">Sell</button>
+          <button class="tab" role="tab" id="tab-shipments" aria-controls="panel-shipments" data-tab="shipments">Shipments</button>
+          <button class="tab" role="tab" id="tab-payouts" aria-controls="panel-payouts" data-tab="payouts">Payouts</button>
+          <button class="tab" role="tab" id="tab-settings" aria-controls="panel-settings" data-tab="settings">Settings</button>
         </div>
 
-        <p class="dashboard-empty" id="dashboardEmpty"></p>
+        <div class="tab-panels" style="padding-top: 1.25rem">
+          <section class="tab-panel" role="tabpanel" id="panel-orders" aria-labelledby="tab-orders" data-panel="orders">
+            <div class="panel-head">
+              <div>
+                <h2>Orders</h2>
+                <p>Sell orders and quote requests, newest first.</p>
+              </div>
+            </div>
+            <div class="card table-card" id="ordersContainer"></div>
+          </section>
+
+          <section class="tab-panel" role="tabpanel" id="panel-sell" aria-labelledby="tab-sell" data-panel="sell" hidden>
+            <div class="panel-head">
+              <div>
+                <h2>Sell to us</h2>
+                <p>Choose sealed products from our buy list, set quantities, and submit one order.</p>
+              </div>
+              <button class="btn btn-ghost" type="button" id="openWantedForm">+ Add buy-list item</button>
+            </div>
+
+            <form class="card admin-form" id="wantedForm" hidden>
+              <h3>New buy-list item</h3>
+              <label class="field">
+                <span>Product name</span>
+                <input id="wantedName" name="wantedName" type="text" placeholder="Pokemon 151 Booster Bundle" required>
+              </label>
+              <label class="field">
+                <span>Category</span>
+                <select id="wantedCategory" name="wantedCategory">
+                  <option>Pokemon</option>
+                  <option>One Piece</option>
+                  <option>Sealed</option>
+                  <option>Slabs</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>UPC / ID</span>
+                <input id="wantedUpc" name="wantedUpc" type="text" placeholder="196214118392">
+              </label>
+              <label class="field">
+                <span>Retailer</span>
+                <input id="wantedRetailer" name="wantedRetailer" type="text" placeholder="Pokemon Center">
+              </label>
+              <label class="field">
+                <span>Retail price</span>
+                <input id="wantedBuyPrice" name="wantedBuyPrice" type="text" placeholder="$59.99">
+              </label>
+              <label class="field">
+                <span>Cashout per unit</span>
+                <input id="wantedCashout" name="wantedCashout" type="number" min="0" step="1" placeholder="300" required>
+              </label>
+              <label class="field">
+                <span>Quantity wanted</span>
+                <input id="wantedQuantity" name="wantedQuantity" type="number" min="1" step="1" value="1" required>
+              </label>
+              <label class="field">
+                <span>Image URL</span>
+                <input id="wantedImageUrl" name="wantedImageUrl" type="url" placeholder="https://…/product.jpg">
+              </label>
+              <label class="field">
+                <span>Or upload image</span>
+                <input id="wantedImage" name="wantedImage" type="file" accept="image/*">
+              </label>
+              <div class="admin-form-actions">
+                <img id="wantedImagePreview" class="admin-preview" alt="" hidden>
+                <button class="btn btn-primary" type="submit">Save item</button>
+                <button class="btn btn-secondary" type="button" id="cancelWantedForm">Cancel</button>
+              </div>
+            </form>
+
+            <div class="sell-controls">
+              <label class="field">
+                <span class="visually-hidden">Search buy list</span>
+                <input id="wantedSearch" type="search" placeholder="Search by name, UPC, or retailer">
+              </label>
+              <label class="field">
+                <span class="visually-hidden">Sort</span>
+                <select id="wantedSort">
+                  <option value="payout">Highest cashout</option>
+                  <option value="spread">Best profit vs. retail</option>
+                  <option value="name">Name A–Z</option>
+                  <option value="quantity">Most wanted</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="chips" id="wantedChips" aria-label="Filter by category"></div>
+
+            <div class="product-grid" id="wantedGrid" aria-live="polite"></div>
+          </section>
+
+          <section class="tab-panel" role="tabpanel" id="panel-shipments" aria-labelledby="tab-shipments" data-panel="shipments" hidden>
+            <div class="panel-head">
+              <div>
+                <h2>Shipments</h2>
+                <p>Ship each order with your own label, then submit it here.</p>
+              </div>
+            </div>
+            <ol class="ship-guide" aria-label="How to ship an order">
+              <li><strong>Photograph before packing</strong><span>Every item, seals and shrink wrap visible.</span></li>
+              <li><strong>Pack and photograph again</strong><span>The items in the box, then the taped box.</span></li>
+              <li><strong>Buy a label and ship</strong><span>Any carrier. Keep your receipt.</span></li>
+              <li><strong>Add tracking here</strong><span>Upload both photo sets with the tracking number.</span></li>
+            </ol>
+            <div class="card table-card" id="shipmentsContainer"></div>
+          </section>
+
+          <section class="tab-panel" role="tabpanel" id="panel-payouts" aria-labelledby="tab-payouts" data-panel="payouts" hidden>
+            <div class="panel-head">
+              <div>
+                <h2>Payouts</h2>
+                <p>Payouts are released after we verify your shipment.</p>
+              </div>
+            </div>
+            <div class="split">
+              <article class="card">
+                <p class="label">Ready to withdraw</p>
+                <strong class="summary-value">$0</strong>
+                <p class="summary-sub">Nothing is ready yet. Funds appear here once an order is verified.</p>
+              </article>
+              <article class="card">
+                <dl class="detail-list">
+                  <div><dt>Pending verification</dt><dd id="payoutPending">$0</dd></div>
+                  <div><dt>Paid out to date</dt><dd>$0</dd></div>
+                  <div><dt>Payout method</dt><dd>Chosen on first payout</dd></div>
+                </dl>
+              </article>
+            </div>
+          </section>
+
+          <section class="tab-panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" data-panel="settings" hidden>
+            <div class="panel-head">
+              <div>
+                <h2>Settings</h2>
+                <p>Your account is linked through Discord.</p>
+              </div>
+            </div>
+            <div class="split">
+              <article class="card">
+                <dl class="detail-list">
+                  <div><dt>Discord account</dt><dd id="profileName">Not signed in</dd></div>
+                  <div><dt>Discord ID</dt><dd class="mono" id="accountDiscordId">Pending</dd></div>
+                  <div><dt>Account created</dt><dd id="accountCreatedAt">Pending</dd></div>
+                  <div><dt>Last login</dt><dd id="accountLastLogin">Pending</dd></div>
+                </dl>
+              </article>
+            </div>
+          </section>
+        </div>
       </section>
     </main>
 
-    <script src="dashboard.js?v=5"></script>
+    <div class="cart-bar" id="cartBar" hidden>
+      <p><span id="cartCount">0 items</span> · <strong id="cartTotal">$0</strong> cashout</p>
+      <button class="btn btn-primary" type="button" id="reviewOrder">Review order</button>
+    </div>
+
+    <dialog class="dialog" id="orderDialog" aria-labelledby="orderDialogTitle">
+      <div class="dialog-head">
+        <h2 id="orderDialogTitle">Review your order</h2>
+        <button class="icon-btn" type="button" data-close-dialog aria-label="Close">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="dialog-body" id="cartLines"></div>
+      <p class="dialog-note">After you submit, ship it with your own label, then add photos and tracking under Shipments.</p>
+      <div class="dialog-foot">
+        <p class="cart-total">Total cashout <strong id="dialogTotal">$0</strong></p>
+        <button class="btn btn-primary" type="button" id="submitOrder">Submit order</button>
+      </div>
+    </dialog>
+
+    <dialog class="dialog" id="shipDialog" aria-labelledby="shipDialogTitle">
+      <form id="shipForm" novalidate>
+        <div class="dialog-head">
+          <div>
+            <h2 id="shipDialogTitle">Submit shipment</h2>
+            <p class="dialog-sub" id="shipDialogOrder"></p>
+          </div>
+          <button class="icon-btn" type="button" data-close-dialog aria-label="Close">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div class="dialog-body ship-form">
+          <div class="ship-row">
+            <label class="field">
+              <span>Carrier</span>
+              <select id="shipCarrier" name="carrier">
+                <option>UPS</option>
+                <option>USPS</option>
+                <option>FedEx</option>
+                <option>Other</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Tracking number</span>
+              <input id="shipTracking" name="tracking" type="text" autocomplete="off" placeholder="1Z999AA10123456784" required>
+              <small class="field-error" id="trackingError" hidden>Enter your tracking number.</small>
+            </label>
+          </div>
+
+          <fieldset class="photo-field">
+            <legend>Before packing <span>Every item, seals visible</span></legend>
+            <label class="photo-drop">
+              <input type="file" accept="image/*" multiple data-photo-set="before">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></svg>
+              <span>Add photos</span>
+            </label>
+            <div class="photo-thumbs" id="beforeThumbs"></div>
+            <small class="field-error" id="beforeError" hidden>Add at least one photo before packing.</small>
+          </fieldset>
+
+          <fieldset class="photo-field">
+            <legend>After packing <span>Items in the box and the sealed box</span></legend>
+            <label class="photo-drop">
+              <input type="file" accept="image/*" multiple data-photo-set="after">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></svg>
+              <span>Add photos</span>
+            </label>
+            <div class="photo-thumbs" id="afterThumbs"></div>
+            <small class="field-error" id="afterError" hidden>Add at least one photo after packing.</small>
+          </fieldset>
+        </div>
+        <progress class="upload-progress" id="shipProgress" max="100" value="0" hidden></progress>
+        <div class="dialog-foot">
+          <button class="btn btn-secondary" type="button" data-close-dialog>Cancel</button>
+          <button class="btn btn-primary" type="submit" id="shipSubmit">Submit shipment</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="dialog dialog-wide" id="photoDialog" aria-labelledby="photoDialogTitle">
+      <div class="dialog-head">
+        <div>
+          <h2 id="photoDialogTitle">Shipment photos</h2>
+          <p class="dialog-sub" id="photoDialogOrder"></p>
+        </div>
+        <button class="icon-btn" type="button" data-close-dialog aria-label="Close">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="dialog-body" id="photoDialogBody"></div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="dashboard.js?v=9"></script>
   </body>
 </html>
