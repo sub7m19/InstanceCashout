@@ -1027,10 +1027,18 @@ function statusBadge(status) {
   return `<span class="badge ${info.badge}">${info.label}</span>`;
 }
 
+// A date with no time ("2026-10-28", e.g. a carrier's estimated delivery) is that calendar day
+// wherever you are; new Date() would read it as UTC midnight and show the day before in the US.
+function parseDate(value) {
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : new Date(value);
+}
+
 function formatDate(value, withTime = true) {
-  return value
-    ? new Intl.DateTimeFormat(undefined, withTime ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" }).format(new Date(value))
-    : "—";
+  if (!value) return "—";
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  return new Intl.DateTimeFormat(undefined, withTime && !dateOnly ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" })
+    .format(parseDate(value));
 }
 
 function sellerName(seller) {
@@ -1060,6 +1068,35 @@ function trackingLink(order) {
     ? `<a class="tracking-link mono" href="${base}${encodeURIComponent(order.tracking)}" target="_blank" rel="noopener">${number}</a>`
     : `<span class="mono">${number}</span>`;
   return `${link}<small>${escapeHtml(order.carrier)}</small>`;
+}
+
+/* Carrier status (from the FedEx / UPS / USPS tracking APIs) */
+
+const CARRIER_STATUS = {
+  label: "Label created",
+  transit: "In transit",
+  out_for_delivery: "Out for delivery",
+  delivered: "Delivered",
+  exception: "Problem",
+  not_found: "Not scanned yet",
+};
+
+function carrierSummary(carrierStatus) {
+  if (!carrierStatus?.status) return "";
+  const { status, location, deliveredAt, estimatedDelivery } = carrierStatus;
+  if (status === "delivered") return `Delivered${deliveredAt ? ` ${formatDate(deliveredAt, false)}` : ""}`;
+  const where = location ? ` · ${location}` : "";
+  const eta = estimatedDelivery && status !== "not_found" ? ` · due ${formatDate(estimatedDelivery, false)}` : "";
+  return `${CARRIER_STATUS[status] || "In transit"}${where}${eta}`;
+}
+
+function carrierChip(order) {
+  const carrierStatus = order.carrierStatus;
+  if (!order.tracking || !carrierStatus) return "";
+  if (!carrierStatus.status) {
+    return `<span class="carrier-chip cs-error" title="${escapeHtml(carrierStatus.error || "")}">Couldn't check</span>`;
+  }
+  return `<span class="carrier-chip cs-${carrierStatus.status}">${escapeHtml(carrierSummary(carrierStatus))}</span>`;
 }
 
 function visibleOrders() {
@@ -1113,7 +1150,7 @@ function orderRowHtml(order, index) {
       </td>
       <td class="items-td"><span class="items-name">${escapeHtml(first?.name || "")}${escapeHtml(more)}</span><small>${units(order)} units</small></td>
       <td class="num total-td"><strong>${formatMoney(order.total)}</strong></td>
-      <td class="tracking-td">${trackingLink(order)}</td>
+      <td class="tracking-td">${trackingLink(order)}${carrierChip(order)}</td>
       <td class="status-td">${statusBadge(order.status)}</td>
       <td class="open-td">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
@@ -1195,6 +1232,30 @@ ordersMessage.addEventListener("click", (event) => {
 $("#refreshOrders").addEventListener("click", async () => {
   await loadOrders();
   showToast("Orders refreshed.");
+});
+
+$("#updateAllTracking").addEventListener("click", async () => {
+  const button = $("#updateAllTracking");
+  button.disabled = true;
+  const label = button.innerHTML;
+  button.textContent = "Checking carriers…";
+  try {
+    const result = await api("POST", "/api/admin/tracking/refresh");
+    orders = result.orders;
+    renderOrders();
+    if (!result.checked) {
+      showToast("No packages on their way right now.");
+    } else if (result.failed) {
+      showToast(`Updated ${result.checked - result.failed} of ${result.checked} packages. Open an order to see why the others couldn't be checked.`, true);
+    } else {
+      showToast(`Updated tracking for ${result.checked} package${result.checked === 1 ? "" : "s"}.`);
+    }
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = label;
+  }
 });
 
 orderRows.addEventListener("click", (event) => {
@@ -1282,6 +1343,7 @@ function renderOrderDrawer() {
               <div><dt>Tracking</dt><dd>${trackingLink(order)}</dd></div>
               <div><dt>Shipped</dt><dd>${formatDate(order.shippedAt)}</dd></div>
             </dl>
+            ${carrierPanel(order)}
             <p class="photo-set-label">Before packing</p>
             <div class="order-photos">${photoTiles("before") || `<span class="muted">No photos</span>`}</div>
             <p class="photo-set-label">After packing</p>
@@ -1311,6 +1373,55 @@ function renderOrderDrawer() {
     actions.push(`<button class="btn btn-primary" type="button" data-order-status="${next.status}">${next.label}</button>`);
   }
   $("#orderActions").innerHTML = actions.join("");
+}
+
+function carrierPanel(order) {
+  const carrierStatus = order.carrierStatus || {};
+  const events = carrierStatus.events || [];
+  const deliveredWaiting = carrierStatus.status === "delivered" && order.status === "transit";
+
+  return `
+    <div class="carrier-panel">
+      <div class="carrier-panel-head">
+        <div>
+          ${carrierStatus.status
+            ? `<p class="carrier-now cs-${carrierStatus.status}"><span class="version-dot" aria-hidden="true"></span>${escapeHtml(carrierSummary(carrierStatus))}</p>
+               ${carrierStatus.label && carrierStatus.label !== CARRIER_STATUS[carrierStatus.status] ? `<small>${escapeHtml(order.carrier)}: "${escapeHtml(carrierStatus.label)}"</small>` : ""}`
+            : `<p class="carrier-now">Live status not checked yet</p>`}
+          ${carrierStatus.checkedAt ? `<small>Checked ${timeAgo(carrierStatus.checkedAt)}</small>` : ""}
+        </div>
+        <button class="btn btn-secondary btn-sm" type="button" data-update-tracking>Update tracking</button>
+      </div>
+      ${carrierStatus.error ? `<p class="carrier-error">${escapeHtml(carrierStatus.error)}</p>` : ""}
+      ${deliveredWaiting ? `<p class="carrier-delivered">${escapeHtml(order.carrier)} shows this delivered. Check the package, then mark it received.</p>` : ""}
+      ${events.length ? `
+        <ol class="carrier-events">
+          ${events.map((event, index) => `
+            <li${index >= 4 ? " hidden" : ""}>
+              <span>${escapeHtml(event.description || "Update")}</span>
+              <small>${formatDate(event.at)}${event.location ? ` · ${escapeHtml(event.location)}` : ""}</small>
+            </li>`).join("")}
+        </ol>
+        ${events.length > 4 ? `<button class="link-button" type="button" data-all-events>Show all ${events.length} scans</button>` : ""}` : ""}
+    </div>`;
+}
+
+async function updateTracking(button) {
+  const order = orders.find((entry) => entry.id === openOrderId);
+  button.disabled = true;
+  button.textContent = "Checking…";
+  try {
+    const updated = await api("POST", `/api/admin/orders/${encodeURIComponent(order.id)}/tracking`);
+    orders = orders.map((entry) => (entry.id === updated.id ? updated : entry));
+    renderOrders();
+    renderOrderDrawer();
+    const carrierStatus = updated.carrierStatus || {};
+    showToast(carrierStatus.error ? carrierStatus.error : `${updated.id}: ${carrierSummary(carrierStatus)}`, Boolean(carrierStatus.error));
+  } catch (error) {
+    showToast(error.message, true);
+    button.disabled = false;
+    button.textContent = "Update tracking";
+  }
 }
 
 async function setOrderStatus(order, status) {
@@ -1351,6 +1462,17 @@ $("#orderActions").addEventListener("click", async (event) => {
 });
 
 $("#orderBody").addEventListener("click", async (event) => {
+  const update = event.target.closest("[data-update-tracking]");
+  if (update) {
+    updateTracking(update);
+    return;
+  }
+  const showAll = event.target.closest("[data-all-events]");
+  if (showAll) {
+    showAll.previousElementSibling.querySelectorAll("li[hidden]").forEach((item) => { item.hidden = false; });
+    showAll.remove();
+    return;
+  }
   const copy = event.target.closest("[data-copy]");
   if (!copy) return;
   try {
@@ -1368,7 +1490,8 @@ orderDrawer.addEventListener("click", (event) => {
 });
 
 orderDrawer.addEventListener("close", () => {
-  openOrderId = null;
+  // The close event arrives a moment later; if another order was opened meanwhile, keep it.
+  if (!orderDrawer.open) openOrderId = null;
 });
 
 /* Site version: what's running, and whether the newest push is live */

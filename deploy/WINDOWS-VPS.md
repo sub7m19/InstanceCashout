@@ -87,6 +87,30 @@ The **Orders** tab lists every sell order: who's sending it, items and total, tr
 to the carrier) and packing photos. Mark an order received, then paid, or cancel it; each
 change is recorded with who made it, and the member sees the new status on their dashboard.
 
+### Live package tracking
+
+The Orders tab can ask FedEx, UPS and USPS where each package is: **Update tracking** in an
+order, **Update all tracking** for every package on its way, and an automatic check every 3
+hours. Members see the same status on their Shipments tab. Each carrier needs its own keys in
+`C:\instancecashout\instancecashout.env` (a carrier left blank just shows its tracking link):
+
+```
+FEDEX_TRACK_API_KEY=
+FEDEX_TRACK_SECRET=
+UPS_TRACK_CLIENT_ID=
+UPS_TRACK_CLIENT_SECRET=
+USPS_CLIENT_ID=
+USPS_CLIENT_SECRET=
+```
+
+- FedEx: a developer.fedex.com project with **Basic Integrated Visibility**, production keys.
+- UPS: a developer.ups.com app with a subscription tier (Free for Shippers includes Tracking).
+- USPS: since April 2026 USPS only tracks packages under your own mailer ID unless you've
+  signed their tracking access agreement (API Access Control helpdesk, 1-877-672-0007).
+
+Restart after editing (`C:\instancecashout\bin\restart.cmd`). `C:\instancecashout\logs\app.log`
+says at startup which carriers are on.
+
 The buy list is saved in `C:\instancecashout\data\uploads\_catalog` and orders in
 `C:\instancecashout\data\uploads\_orders`; both are in the nightly backup.
 

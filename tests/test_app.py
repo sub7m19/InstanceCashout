@@ -48,6 +48,11 @@ class AppTest(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.status(path), 200)
 
+    def test_pages_are_rechecked_so_deploys_show_up(self):
+        for path in ("/", "/dashboard.html", "/admin.html"):
+            with self.subTest(path=path), self.client.get(path) as response:
+                self.assertEqual(response.headers["Cache-Control"], "no-cache")
+
     def test_source_stays_private(self):
         for path in ("/main.py", "/requirements.txt", "/.gitignore", "/tests/test_app.py"):
             with self.subTest(path=path):

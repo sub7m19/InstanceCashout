@@ -119,15 +119,19 @@ function accountKey(discordId) {
   return `${ACCOUNT_PREFIX}${discordId}`;
 }
 
-function formatDate(value) {
+function formatDate(value, withTime = true) {
   if (!value) {
     return "Pending";
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  // A date with no time ("2026-10-28", e.g. a carrier's estimated delivery) is that calendar day
+  // wherever you are; new Date() would read it as UTC midnight and show the day before in the US.
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const date = day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : new Date(value);
+
+  return new Intl.DateTimeFormat(undefined, withTime && !day
+    ? { dateStyle: "medium", timeStyle: "short" }
+    : { dateStyle: "medium" }).format(date);
 }
 
 function formatMoney(value) {
@@ -641,7 +645,32 @@ function trackingMarkup(order) {
   const link = base
     ? `<a class="tracking-link mono" href="${base}${encodeURIComponent(order.tracking)}" target="_blank" rel="noopener">${number}</a>`
     : `<span class="mono">${number}</span>`;
-  return `${link}<span class="cell-sub">${escapeHtml(order.carrier)}</span>`;
+  return `${link}<span class="cell-sub">${escapeHtml(order.carrier)}</span>${carrierLine(order.carrierStatus)}`;
+}
+
+// The carrier's latest status, which the server checks every few hours (FedEx / UPS / USPS).
+const CARRIER_STATUS = {
+  label: "Label created",
+  transit: "In transit",
+  out_for_delivery: "Out for delivery",
+  delivered: "Delivered",
+  exception: "Delivery problem",
+  not_found: "Not scanned yet",
+};
+
+function carrierLine(carrierStatus) {
+  if (!carrierStatus?.status) {
+    return "";
+  }
+  const { status, location, deliveredAt, estimatedDelivery } = carrierStatus;
+  let text = CARRIER_STATUS[status] || "In transit";
+  if (status === "delivered" && deliveredAt) {
+    text += ` ${formatDate(deliveredAt, false)}`;
+  } else if (status !== "not_found") {
+    text += location ? ` · ${location}` : "";
+    text += estimatedDelivery ? ` · due ${formatDate(estimatedDelivery, false)}` : "";
+  }
+  return `<span class="carrier-line cs-${status}">${escapeHtml(text)}</span>`;
 }
 
 function renderShipments() {
@@ -712,6 +741,8 @@ function renderSummary(rows) {
 
   if (pendingShipment) {
     setStepHint(`Next: photograph and pack ${pendingShipment.id}, ship it with your own label, then add the tracking number under Shipments.`);
+  } else if (latest?.status === "transit" && latest.carrierStatus?.status === "delivered") {
+    setStepHint(`${latest.carrier} shows ${latest.id} delivered. We'll check it and confirm shortly.`);
   } else if (latest?.status === "transit") {
     setStepHint(`${latest.id} is on the way. We'll verify it as soon as it arrives.`);
   } else if (latest?.status === "received") {

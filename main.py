@@ -6,6 +6,7 @@ import re
 import secrets
 import subprocess
 import threading
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,6 +15,8 @@ from urllib.parse import urlencode
 import requests
 from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session
 from waitress import serve
+
+import carriers
 
 SITE_DIR = Path(__file__).resolve().parent
 
@@ -508,6 +511,81 @@ def admin_order_photo(order_id, name):
     return send_order_photo(find_order(read_orders(), order_id), name)
 
 
+# Live carrier tracking: each shipped order keeps the carrier's latest status in
+# order["carrierStatus"] (see carriers.py). Admins can update it; a background thread also
+# checks packages still on their way every few hours.
+
+TRACKING_REFRESH_SECONDS = 3 * 60 * 60
+RECHECK_AFTER_SECONDS = 30  # a second click within this time reuses the result
+
+
+def needs_tracking_check(order):
+    """Shipped, not yet received by us, and the carrier hasn't said delivered."""
+    return (order.get("tracking") and order["status"] == "transit"
+            and (order.get("carrierStatus") or {}).get("status") != "delivered")
+
+
+def refresh_tracking(order_id, force=False):
+    """Asks the carrier for the order's package status and saves it on the order."""
+    order = find_order(read_orders(), order_id)
+    if not order.get("tracking"):
+        raise ApiError(400, "This order doesn't have a tracking number yet.")
+
+    previous = order.get("carrierStatus") or {}
+    if not force and previous.get("checkedAt") and not previous.get("error"):
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(previous["checkedAt"])).total_seconds()
+        if age < RECHECK_AFTER_SECONDS:
+            return order
+
+    try:
+        status = carriers.track(order["carrier"], order["tracking"])
+    except carriers.CarrierUnavailable as error:
+        # Keep the last good status, and say why this check failed.
+        status = {**{k: v for k, v in previous.items() if k != "error"}, "error": str(error),
+                  "carrier": order["carrier"], "checkedAt": now_iso()}
+
+    with _orders_lock:
+        orders = read_orders()
+        order = find_order(orders, order_id)
+        order["carrierStatus"] = status
+        write_json_atomic(ORDERS_FILE, orders)
+    return order
+
+
+@app.post("/api/admin/orders/<order_id>/tracking")
+def admin_refresh_tracking(order_id):
+    require_admin()
+    return jsonify(refresh_tracking(order_id))
+
+
+@app.post("/api/admin/tracking/refresh")
+def admin_refresh_all_tracking():
+    """Updates every package still on its way to us."""
+    require_admin()
+    checked = failed = 0
+    for order in [order for order in read_orders() if needs_tracking_check(order)]:
+        result = refresh_tracking(order["id"], force=True)
+        checked += 1
+        failed += bool(result["carrierStatus"].get("error"))
+    return jsonify(orders=read_orders(), checked=checked, failed=failed)
+
+
+def track_in_background():
+    """Checks packages still on their way every few hours, so statuses stay current."""
+    time.sleep(5 * 60)  # let the site start (and settle after deploys) first
+    while True:
+        for order in [order for order in read_orders() if needs_tracking_check(order)]:
+            checked_at = (order.get("carrierStatus") or {}).get("checkedAt")
+            if checked_at and (datetime.now(timezone.utc) - datetime.fromisoformat(checked_at)).total_seconds() < TRACKING_REFRESH_SECONDS:
+                continue
+            try:
+                refresh_tracking(order["id"], force=True)
+            except Exception:
+                logging.exception("Background tracking check failed for %s", order["id"])
+            time.sleep(2)  # gentle on the carriers' rate limits
+        time.sleep(15 * 60)
+
+
 # Product catalog
 
 _catalog_lock = threading.Lock()
@@ -752,16 +830,26 @@ def health():
     return jsonify(ok=True, version=VERSION if local else None)
 
 
+def send_page_file(filename):
+    response = send_from_directory(SITE_DIR, filename)
+    if filename.endswith(".html"):
+        # Pages name their scripts and styles with ?v= versions. Without this, browsers guess how
+        # long to reuse a saved page, and keep loading the old scripts after a deploy.
+        # "no-cache" still lets them reuse it when the server says it hasn't changed (a 304).
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.get("/")
 def home():
-    return send_from_directory(SITE_DIR, "index.html")
+    return send_page_file("index.html")
 
 
 @app.get("/<path:filename>")
 def static_file(filename):
     if filename not in PUBLIC_FILES and not filename.startswith("assets/"):
         abort(404)
-    return send_from_directory(SITE_DIR, filename)
+    return send_page_file(filename)
 
 
 def setup_logging():
@@ -780,6 +868,9 @@ def main():
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "8000"))
     logging.info("Instance Cashout %s is running at http://%s:%s/", VERSION or "(no git)", host, port)
+    logging.info("Carrier tracking: %s", ", ".join(
+        f"{name} {'on' if carriers.configured(name) else 'off'}" for name in ("FedEx", "UPS", "USPS")))
+    threading.Thread(target=track_in_background, daemon=True, name="tracking").start()
     serve(app, host=host, port=port, threads=8, max_request_body_size=app.config["MAX_CONTENT_LENGTH"])
 
 

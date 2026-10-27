@@ -942,6 +942,24 @@ button {
   text-decoration: underline;
 }
 
+/* Carrier status from the tracking APIs (shared by the member and admin pages) */
+
+.cs-label { --cs: var(--text-muted); }
+.cs-transit { --cs: var(--blue); }
+.cs-out_for_delivery { --cs: #b9a5ff; }
+.cs-delivered { --cs: var(--green); }
+.cs-exception,
+.cs-error { --cs: var(--red); }
+.cs-not_found { --cs: var(--text-faint); }
+
+.carrier-line {
+  color: var(--cs, var(--text-muted));
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+
 .cell-sub {
   color: var(--text-faint);
   display: block;

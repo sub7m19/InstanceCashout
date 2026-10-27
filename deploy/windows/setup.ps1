@@ -123,6 +123,17 @@ DISCORD_CLIENT_SECRET=
 # Discord user ids (comma-separated) that can open /admin.html and edit the buy list.
 ADMIN_DISCORD_IDS=
 
+# Live package tracking on the admin Orders tab. Leave a carrier blank to skip it.
+# FedEx: developer.fedex.com project with Basic Integrated Visibility (production keys)
+FEDEX_TRACK_API_KEY=
+FEDEX_TRACK_SECRET=
+# UPS: developer.ups.com app with a subscription tier (Tracking is included)
+UPS_TRACK_CLIENT_ID=
+UPS_TRACK_CLIENT_SECRET=
+# USPS: needs USPS's tracking access agreement to track packages others ship to you
+USPS_CLIENT_ID=
+USPS_CLIENT_SECRET=
+
 SESSION_SECRET=$sessionSecret
 "@ | Set-Content -Path $EnvFile -Encoding ASCII
   Done "Created. Add the Discord client secret to it."
