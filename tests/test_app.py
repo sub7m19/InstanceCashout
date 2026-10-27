@@ -267,6 +267,13 @@ class CatalogTest(unittest.TestCase):
         # Every starter product except the one that starts hidden
         self.assertEqual(len(self.member_product_ids()), len(main.DEFAULT_PRODUCTS) - 1)
 
+    def test_version_is_admin_only(self):
+        self.assertEqual(self.client.get("/api/admin/version", headers=MEMBER).status_code, 403)
+        info = self.client.get("/api/admin/version", headers=ADMIN).get_json()
+        self.assertIn(info["status"], {"live", "pending", "skipped", "unknown"})
+        if main.RUNNING:
+            self.assertEqual(info["running"]["version"], main.VERSION)
+
     def test_only_admins_can_change_products(self):
         self.assertEqual(self.client.get("/api/admin/products", headers=MEMBER).status_code, 403)
         self.assertEqual(self.client.post("/api/admin/products", headers=MEMBER, json={"name": "x"}).status_code, 403)

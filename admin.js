@@ -952,7 +952,7 @@ async function start() {
 
   $("#adminApp").hidden = false;
   showView(location.hash === "#orders" ? "orders" : "products");
-  await Promise.all([loadProducts(), loadOrders()]);
+  await Promise.all([loadProducts(), loadOrders(), loadVersion()]);
 }
 
 /* Views: Products | Orders */
@@ -1370,6 +1370,102 @@ orderDrawer.addEventListener("click", (event) => {
 orderDrawer.addEventListener("close", () => {
   openOrderId = null;
 });
+
+/* Site version: what's running, and whether the newest push is live */
+
+const versionPill = $("#versionPill");
+const versionDialog = $("#versionDialog");
+let versionInfo = null;
+let versionCheckedAt = null;
+let pageVersion = null; // the version this admin page was loaded from
+
+const VERSION_STATUS = {
+  live: { pill: "Live", text: "Live: the site is running the latest update from GitHub." },
+  pending: { pill: "Deploying", text: "A newer update is on GitHub. The server tests it and switches over within about a minute." },
+  skipped: { pill: "Update failed", text: "The newest update failed its tests or didn't start, so the site stayed on the previous version. Push a fix to deploy it." },
+  unknown: { pill: "Unknown", text: "Can't compare with GitHub from here (for example, when running on your own computer)." },
+};
+
+function timeAgo(value) {
+  const seconds = Math.round((Date.now() - new Date(value)) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)} h ago`;
+  return formatDate(value, false);
+}
+
+function commitCard(label, commit, extra = "") {
+  return `
+    <div class="commit-card">
+      <p class="label">${label}</p>
+      <p class="commit-line"><span class="mono commit-hash">${escapeHtml(commit.version)}</span> ${escapeHtml(commit.subject)}</p>
+      <small>Pushed ${formatDate(commit.committedAt)}${extra}</small>
+    </div>`;
+}
+
+function renderVersion() {
+  if (!versionInfo) return;
+  const { running, latest, status, startedAt, recentDeploys } = versionInfo;
+  const needsReload = pageVersion && running && running.version !== pageVersion;
+
+  versionPill.dataset.status = needsReload ? "reload" : status;
+  // The version code is hidden on phones to save room; the status word always shows.
+  $("#versionPillText").innerHTML = needsReload
+    ? `<span class="version-hash">New version · </span>Reload`
+    : `<span class="version-hash">${escapeHtml(running ? running.version : "dev")} · </span>${VERSION_STATUS[status].pill}`;
+  versionPill.title = needsReload ? "A new version is live. Reload this page to use it." : VERSION_STATUS[status].text;
+
+  if (!versionDialog.open) return;
+
+  $("#versionBody").innerHTML = `
+    <p class="version-banner" data-status="${status}">
+      <span class="version-dot" aria-hidden="true"></span>${VERSION_STATUS[status].text}
+    </p>
+    ${needsReload ? `<p class="version-banner" data-status="reload"><span class="version-dot" aria-hidden="true"></span>
+      This page is from an older version. <button class="link-button" type="button" data-reload>Reload now</button></p>` : ""}
+    ${running ? commitCard("Running on the server", running, ` · running since ${formatDate(startedAt)}`) : ""}
+    ${latest && status !== "live" ? commitCard("Newest on GitHub", latest) : ""}
+    ${recentDeploys.length ? `
+      <div class="deploy-log">
+        <p class="label">Recent deploy activity</p>
+        <ul>${recentDeploys.map((entry) => `<li><span class="mono">${escapeHtml(entry.at)}</span>${escapeHtml(entry.message)}</li>`).join("")}</ul>
+      </div>` : ""}`;
+  $("#versionChecked").textContent = versionCheckedAt ? `Checked ${timeAgo(versionCheckedAt)}` : "";
+}
+
+async function loadVersion() {
+  try {
+    const previous = versionInfo?.status;
+    versionInfo = await api("GET", "/api/admin/version");
+    versionCheckedAt = new Date();
+    pageVersion = pageVersion || versionInfo.running?.version || null;
+    renderVersion();
+    if (previous && previous !== "live" && versionInfo.status === "live") {
+      showToast(`Update ${versionInfo.running.version} is live.`);
+    }
+  } catch (error) {
+    // Keep the last known version.
+  }
+}
+
+versionPill.addEventListener("click", () => {
+  versionDialog.showModal();
+  renderVersion();
+  loadVersion();
+});
+
+$("#versionClose").addEventListener("click", () => versionDialog.close());
+$("#versionRefresh").addEventListener("click", loadVersion);
+$("#versionBody").addEventListener("click", (event) => {
+  if (event.target.closest("[data-reload]")) location.reload();
+});
+
+// Check again every 30 s, or every 10 s while an update is deploying.
+async function watchVersion() {
+  if (document.visibilityState === "visible") await loadVersion();
+  setTimeout(watchVersion, versionInfo?.status === "pending" ? 10000 : 30000);
+}
+setTimeout(watchVersion, 30000);
 
 /* Live refresh: keep counts current during a rush, without interrupting edits */
 

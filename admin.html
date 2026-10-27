@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
     <link rel="stylesheet" href="dashboard.css?v=11">
-    <link rel="stylesheet" href="admin.css?v=4">
+    <link rel="stylesheet" href="admin.css?v=6">
   </head>
   <body>
     <header class="dash-header">
@@ -41,10 +41,17 @@
       </section>
 
       <div id="adminApp" hidden>
-        <div class="tabs admin-tabs" role="tablist" aria-label="Admin sections">
-          <button class="tab" role="tab" id="tab-products" aria-controls="view-products" data-view="products" aria-selected="true">Products</button>
-          <button class="tab" role="tab" id="tab-orders" aria-controls="view-orders" data-view="orders" aria-selected="false">
-            Orders <span class="tab-count" id="openOrdersCount" title="Open orders">0</span>
+        <div class="admin-tabbar">
+          <div class="tabs admin-tabs" role="tablist" aria-label="Admin sections">
+            <button class="tab" role="tab" id="tab-products" aria-controls="view-products" data-view="products" aria-selected="true">Products</button>
+            <button class="tab" role="tab" id="tab-orders" aria-controls="view-orders" data-view="orders" aria-selected="false">
+              Orders <span class="tab-count" id="openOrdersCount" title="Open orders">0</span>
+            </button>
+          </div>
+          <!-- Which update the site is running, and whether the newest push is live -->
+          <button class="version-pill" id="versionPill" type="button" aria-haspopup="dialog" data-status="unknown">
+            <span class="version-dot" aria-hidden="true"></span>
+            <span id="versionPillText">Version…</span>
           </button>
         </div>
 
@@ -346,6 +353,21 @@
       </div>
     </dialog>
 
+    <!-- Site version -->
+    <dialog class="dialog version-dialog" id="versionDialog" aria-labelledby="versionTitle">
+      <div class="dialog-head">
+        <h2 id="versionTitle">Site version</h2>
+        <button class="icon-btn" type="button" id="versionClose" aria-label="Close">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="dialog-body version-body" id="versionBody"></div>
+      <div class="dialog-foot">
+        <span class="muted" id="versionChecked"></span>
+        <button class="btn btn-secondary btn-sm" type="button" id="versionRefresh">Check again</button>
+      </div>
+    </dialog>
+
     <!-- Restock: start a new round of units for a product -->
     <dialog class="dialog confirm-dialog" id="restockDialog" aria-labelledby="restockTitle">
       <form id="restockForm" novalidate>
@@ -385,6 +407,6 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="admin.js?v=4"></script>
+    <script src="admin.js?v=6"></script>
   </body>
 </html>

@@ -96,16 +96,29 @@ PUBLIC_FILES = {
     "script.js", "dashboard.js", "admin.js",
 }
 
-def _version():
-    """The git commit this copy of the code is at, shown by /api/health."""
+def git(*args):
+    """Runs git in the app folder; returns its output, or "" if git isn't there or fails."""
     try:
-        out = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=SITE_DIR, capture_output=True, text=True, timeout=5)
+        out = subprocess.run(["git", *args], cwd=SITE_DIR, capture_output=True, text=True, timeout=5)
         return out.stdout.strip() if out.returncode == 0 else ""
     except (OSError, subprocess.SubprocessError):
         return ""
 
 
-VERSION = _version()
+def commit_info(ref):
+    """{version, fullVersion, subject, committedAt} for a git ref, or None."""
+    fields = git("log", "-1", "--format=%h%x1f%H%x1f%s%x1f%cI", ref).split("\x1f")
+    if len(fields) != 4:
+        return None
+    return dict(zip(("version", "fullVersion", "subject", "committedAt"), fields))
+
+
+# The commit this process is running, shown by /api/health and the admin dashboard.
+VERSION = git("rev-parse", "--short", "HEAD")
+RUNNING = commit_info("HEAD")
+STARTED_AT = datetime.now(timezone.utc).isoformat()
+# deploy.ps1 writes its log and the commit it skipped here (C:\instancecashout\logs on the server).
+DEPLOY_LOG_DIR = Path(os.environ.get("LOG_DIR") or SITE_DIR.parent / "logs")
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_PHOTOS_PER_SET * len(PHOTO_SETS) * MAX_PHOTO_BYTES + 1024 * 1024
@@ -700,6 +713,35 @@ def product_image(name):
     # Each upload gets a new name, so a cached copy never goes stale.
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
+
+
+@app.get("/api/admin/version")
+def admin_version():
+    """Which update is running, the newest one on GitHub, and whether it's live yet.
+
+    The server's deploy task fetches GitHub every minute and tests a new commit before
+    switching to it, so "latest" is as of that last check.
+    """
+    require_admin()
+    latest = commit_info("origin/main")
+
+    if not RUNNING or not latest:
+        status = "unknown"
+    elif latest["fullVersion"] == RUNNING["fullVersion"]:
+        status = "live"
+    else:
+        skip_file = DEPLOY_LOG_DIR / "skip-commit.txt"
+        skipped = skip_file.is_file() and skip_file.read_text(encoding="utf-8", errors="replace").strip() == latest["fullVersion"]
+        status = "skipped" if skipped else "pending"
+
+    deploy_log = DEPLOY_LOG_DIR / "deploy.log"
+    recent = []
+    if deploy_log.is_file():
+        lines = deploy_log.read_text(encoding="utf-8", errors="replace").splitlines()
+        # "2026-10-26 21:50:01 Tests passed, deploying abc1234" -> time + message, newest first
+        recent = [{"at": line[:19], "message": line[20:]} for line in reversed(lines[-8:]) if len(line) > 20]
+
+    return jsonify(running=RUNNING, startedAt=STARTED_AT, latest=latest, status=status, recentDeploys=recent)
 
 
 @app.get("/api/health")

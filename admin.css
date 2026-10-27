@@ -764,10 +764,147 @@
   margin: 0;
 }
 
-/* Products | Orders tabs */
+/* Products | Orders tabs, with the version on the right */
 
-.admin-tabs {
+.admin-tabbar {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
   margin-bottom: -0.25rem;
+}
+
+.admin-tabbar .tabs {
+  border-bottom: 0;
+  min-width: 0;
+}
+
+/* Version pill: green live, gold deploying, red failed, blue reload */
+
+.version-pill,
+.version-banner {
+  --tone: var(--text-faint);
+  --tone-soft: var(--surface-2);
+}
+
+[data-status="live"] { --tone: var(--green); --tone-soft: var(--green-soft); }
+[data-status="pending"] { --tone: var(--gold); --tone-soft: var(--gold-soft); }
+[data-status="skipped"] { --tone: var(--red); --tone-soft: var(--red-soft); }
+[data-status="reload"] { --tone: var(--blue); --tone-soft: var(--blue-soft); }
+
+.version-pill {
+  align-items: center;
+  background: var(--tone-soft);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--text);
+  display: inline-flex;
+  flex: none;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 0.45rem;
+  min-height: 36px;
+  padding: 0 0.8rem;
+  transition: border-color 150ms var(--ease);
+  white-space: nowrap;
+}
+
+.version-pill:hover {
+  border-color: var(--tone);
+}
+
+.version-dot {
+  background: var(--tone);
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  height: 8px;
+  width: 8px;
+}
+
+[data-status="pending"] .version-dot,
+[data-status="reload"] .version-dot {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.version-dialog {
+  max-width: 520px;
+}
+
+.version-body {
+  display: grid;
+  gap: 1rem;
+  max-height: 65vh;
+  padding-top: 1rem;
+}
+
+.version-banner {
+  align-items: baseline;
+  background: var(--tone-soft);
+  border-radius: var(--radius-sm);
+  display: flex;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+}
+
+.link-button {
+  background: none;
+  border: 0;
+  color: var(--blue);
+  font-weight: 700;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.commit-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.85rem 1rem;
+}
+
+.commit-card p {
+  margin: 0;
+}
+
+.commit-line {
+  font-weight: 600;
+}
+
+.commit-hash {
+  background: var(--surface);
+  border-radius: 5px;
+  color: var(--green);
+  margin-right: 0.35rem;
+  padding: 0.05rem 0.4rem;
+}
+
+.commit-card small {
+  color: var(--text-faint);
+}
+
+.deploy-log ul {
+  display: grid;
+  gap: 0.45rem;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.deploy-log li {
+  color: var(--text-muted);
+  display: grid;
+  font-size: 0.85rem;
+  gap: 0.1rem;
+}
+
+.deploy-log li .mono {
+  color: var(--text-faint);
+  font-size: 0.75rem;
 }
 
 .admin-tabs .tab-count {
@@ -1348,6 +1485,15 @@
 }
 
 @media (max-width: 640px) {
+  /* Version pill: just the dot and status word beside the tabs */
+  .version-hash {
+    display: none;
+  }
+
+  .version-pill {
+    padding: 0 0.65rem;
+  }
+
   /* Header: icon-only "Member view" so it fits beside the logo and Admin badge */
   .member-view-link span {
     display: none;
@@ -1397,6 +1543,7 @@
   .admin-table tbody tr,
   .drawer[open],
   .skeleton,
+  .version-dot,
   .inline-edit.is-saving::after {
     animation: none !important;
   }
