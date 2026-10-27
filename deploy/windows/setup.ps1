@@ -120,6 +120,9 @@ PUBLIC_URL=https://$Domain
 DISCORD_CLIENT_ID=1564455712044884038
 DISCORD_CLIENT_SECRET=
 
+# Discord user ids (comma-separated) that can open /admin.html and edit the buy list.
+ADMIN_DISCORD_IDS=
+
 SESSION_SECRET=$sessionSecret
 "@ | Set-Content -Path $EnvFile -Encoding ASCII
   Done "Created. Add the Discord client secret to it."

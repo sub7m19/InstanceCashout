@@ -1242,34 +1242,6 @@ button {
   padding-inline: 0.6rem;
 }
 
-.admin-form {
-  display: grid;
-  gap: 0.85rem;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  margin-bottom: 1rem;
-  padding: 1.25rem;
-}
-
-.admin-form h3 {
-  font-size: 1rem;
-  grid-column: 1 / -1;
-  margin: 0;
-}
-
-.admin-form-actions {
-  display: flex;
-  gap: 0.6rem;
-  grid-column: 1 / -1;
-}
-
-.admin-preview {
-  background: var(--surface-2);
-  border-radius: var(--radius-sm);
-  height: 44px;
-  object-fit: cover;
-  width: 44px;
-}
-
 /* Cart bar */
 
 .cart-bar {

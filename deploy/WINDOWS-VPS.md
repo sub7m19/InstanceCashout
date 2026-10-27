@@ -74,6 +74,18 @@ Cloudflare's free certificate only covers `<name>.buffsquad.net`.
 The old static copy on GitHub Pages can't save shipments. On GitHub: the InstanceCashout
 repo → **Settings** → **Pages** → set **Source** to **None** (or unpublish the site).
 
+## Admin dashboard
+
+`https://instance-cashout.buffsquad.net/admin.html` manages the buy list members see on the
+Sell tab: add, edit, hide or delete products, change cashout and quantity in the table, and
+upload product images. To get access, open it while signed in: it shows your Discord ID. Add
+that to `ADMIN_DISCORD_IDS=` in `C:\instancecashout\instancecashout.env` (comma-separated for
+several people), then run `C:\instancecashout\bin\restart.cmd`. Admins also get an **Admin**
+link in the dashboard header.
+
+The buy list is saved in `C:\instancecashout\data\uploads\_catalog` and included in the
+nightly backup.
+
 ## Day to day
 
 | Task | How |

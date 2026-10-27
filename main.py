@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import subprocess
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -43,8 +44,30 @@ DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID", "")
 DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "")
 DISCORD_REDIRECT_URI = f"{PUBLIC_URL}/auth/discord/callback"
 
+# Discord user ids (comma-separated) that get the admin dashboard.
+ADMIN_IDS = {part.strip() for part in os.environ.get("ADMIN_DISCORD_IDS", "").split(",") if part.strip()}
+
 # Local testing only: lets "Bearer dev:<id>" stand in for a signed-in user.
 DEV_AUTH = os.environ.get("INSTANCE_DEV_AUTH") == "1"
+
+# The buy list members sell from, edited on the admin dashboard. It lives with the uploads so
+# the nightly backup covers it; "_catalog" can't clash with a user folder (those are ids).
+CATALOG_DIR = UPLOAD_DIR / "_catalog"
+PRODUCTS_FILE = CATALOG_DIR / "products.json"
+PRODUCT_IMAGE_DIR = CATALOG_DIR / "images"
+PRODUCT_IMAGE_PATTERN = re.compile(r"^[0-9a-f]{32}\.(jpg|png|webp)$")
+MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024
+CATEGORIES = ["Pokemon", "One Piece", "Sealed", "Slabs"]
+DEFAULT_PRODUCTS = [
+    {"id": "want-151-mini-tin", "name": "Pokemon 151 Mini Tin Collection 10 Pack", "category": "Pokemon",
+     "upc": "151151151515", "retailer": "Sam's Club", "retailPrice": 74.98, "cashout": 490, "quantity": 965},
+    {"id": "want-prismatic-etb", "name": "Prismatic Evolutions Elite Trainer Box", "category": "Sealed",
+     "upc": "196214105195", "retailer": "Pokemon Center", "retailPrice": 54.99, "cashout": 320, "quantity": 2047},
+    {"id": "want-destined-rivals", "name": "Pokemon Destined Rivals Booster Box", "category": "Pokemon",
+     "upc": "196214111189", "retailer": "Target", "retailPrice": 119.99, "cashout": 330, "quantity": 940},
+    {"id": "want-blooming-waters", "name": "Pokemon 151 Blooming Waters Premium Collection", "category": "Sealed",
+     "upc": "196214119017", "retailer": "Best Buy", "retailPrice": 59.99, "cashout": 300, "quantity": 4070},
+]
 
 MAX_PHOTOS_PER_SET = 8
 MAX_PHOTO_BYTES = 8 * 1024 * 1024
@@ -55,7 +78,11 @@ PHOTO_NAME_PATTERN = re.compile(r"^(before|after)-[0-9a-f]{32}\.(jpg|png|webp)$"
 TRACKING_PATTERN = re.compile(r"^[A-Z0-9-]{6,40}$")
 
 # Static files the site needs; everything else in the repo (code, uploads, venv) stays private.
-PUBLIC_FILES = {"index.html", "dashboard.html", "styles.css", "dashboard.css", "script.js", "dashboard.js"}
+PUBLIC_FILES = {
+    "index.html", "dashboard.html", "admin.html",
+    "styles.css", "dashboard.css", "admin.css",
+    "script.js", "dashboard.js", "admin.js",
+}
 
 def _version():
     """The git commit this copy of the code is at, shown by /api/health."""
@@ -182,7 +209,15 @@ def me():
     user = session.get("user")
     if not user:
         raise ApiError(401, "Log in with Discord to continue.")
-    return jsonify(user)
+    return jsonify({**user, "isAdmin": user["id"] in ADMIN_IDS})
+
+
+def require_admin():
+    if current_user_id() not in ADMIN_IDS:
+        raise ApiError(403, "Admins only.")
+    # A custom header can't be sent by another site's form, so admin changes can't be forged.
+    if request.method != "GET" and request.headers.get("X-Requested-With") != "fetch":
+        raise ApiError(403, "Admins only.")
 
 
 @app.post("/auth/logout")
@@ -302,6 +337,186 @@ def shipment_photo(order_id, name):
 
     response = send_from_directory(folder, name)
     response.headers["Cache-Control"] = "private, max-age=3600"
+    return response
+
+
+# Product catalog
+
+_catalog_lock = threading.Lock()
+
+
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def read_products():
+    if not PRODUCTS_FILE.is_file():
+        return [{**product, "image": None, "active": True, "updatedAt": now_iso()} for product in DEFAULT_PRODUCTS]
+    return json.loads(PRODUCTS_FILE.read_text(encoding="utf-8"))
+
+
+def write_products(products):
+    CATALOG_DIR.mkdir(parents=True, exist_ok=True)
+    # Write then rename, so a crash mid-write never leaves a half-written catalog.
+    temp = PRODUCTS_FILE.with_suffix(".tmp")
+    temp.write_text(json.dumps(products, indent=2), encoding="utf-8")
+    os.replace(temp, PRODUCTS_FILE)
+
+
+def find_product(products, product_id):
+    for product in products:
+        if product["id"] == product_id:
+            return product
+    raise ApiError(404, "Product not found.")
+
+
+def number_field(data, key, *, minimum=0, integer=False, optional=False):
+    value = data.get(key)
+    if value in (None, "") and optional:
+        return None
+    try:
+        number = int(value) if integer else round(float(value), 2)
+    except (TypeError, ValueError):
+        raise ApiError(400, f"Enter a number for {key}.")
+    if number < minimum or number > 1_000_000:
+        raise ApiError(400, f"{key} is out of range.")
+    return number
+
+
+def text_field(data, key, limit, *, required=False):
+    value = str(data.get(key) or "").strip()
+    if required and not value:
+        raise ApiError(400, f"Enter a {key}.")
+    if len(value) > limit:
+        raise ApiError(400, f"{key} is too long (max {limit}).")
+    return value
+
+
+def clean_product(data, current=None):
+    """Validates a new product, or the changed fields of an existing one."""
+    product = dict(current or {})
+    fields = data.keys() if current else {"name", "category", "upc", "retailer", "retailPrice", "cashout", "quantity", "image", "active"}
+
+    for key in fields:
+        if key == "name":
+            product["name"] = text_field(data, "name", 120, required=True)
+        elif key == "category":
+            if data.get("category") not in CATEGORIES:
+                raise ApiError(400, "Choose a category.")
+            product["category"] = data["category"]
+        elif key == "upc":
+            product["upc"] = text_field(data, "upc", 40)
+        elif key == "retailer":
+            product["retailer"] = text_field(data, "retailer", 60)
+        elif key == "retailPrice":
+            product["retailPrice"] = number_field(data, "retailPrice", optional=True)
+        elif key == "cashout":
+            product["cashout"] = number_field(data, "cashout")
+        elif key == "quantity":
+            product["quantity"] = number_field(data, "quantity", integer=True)
+        elif key == "image":
+            image = data.get("image") or None
+            if image and not (image.startswith("https://") and len(image) <= 500
+                              or image.startswith("/product-images/") and PRODUCT_IMAGE_PATTERN.match(image.removeprefix("/product-images/"))):
+                raise ApiError(400, "Image must be an https:// link or an uploaded image.")
+            product["image"] = image
+        elif key == "active":
+            product["active"] = bool(data.get("active", True))
+
+    product["updatedAt"] = now_iso()
+    return product
+
+
+def delete_uploaded_image(product):
+    image = product.get("image") or ""
+    if image.startswith("/product-images/"):
+        (PRODUCT_IMAGE_DIR / image.removeprefix("/product-images/")).unlink(missing_ok=True)
+
+
+@app.get("/api/products")
+def list_products():
+    current_user_id()
+    products = [product for product in read_products() if product.get("active", True)]
+    return jsonify(products=products, categories=CATEGORIES)
+
+
+@app.get("/api/admin/products")
+def admin_list_products():
+    require_admin()
+    return jsonify(products=read_products(), categories=CATEGORIES)
+
+
+@app.post("/api/admin/products")
+def admin_create_product():
+    require_admin()
+    with _catalog_lock:
+        products = read_products()
+        product = {"id": f"prod-{uuid.uuid4().hex[:12]}", **clean_product(request.get_json(silent=True) or {})}
+        products.insert(0, product)
+        write_products(products)
+    return jsonify(product), 201
+
+
+@app.patch("/api/admin/products/<product_id>")
+def admin_update_product(product_id):
+    require_admin()
+    changes = request.get_json(silent=True) or {}
+    with _catalog_lock:
+        products = read_products()
+        current = find_product(products, product_id)
+        updated = clean_product(changes, current)
+        if "image" in changes and current.get("image") != updated.get("image"):
+            delete_uploaded_image(current)
+        products[products.index(current)] = updated
+        write_products(products)
+    return jsonify(updated)
+
+
+@app.delete("/api/admin/products/<product_id>")
+def admin_delete_product(product_id):
+    require_admin()
+    with _catalog_lock:
+        products = read_products()
+        product = find_product(products, product_id)
+        products.remove(product)
+        write_products(products)
+        delete_uploaded_image(product)
+    return "", 204
+
+
+@app.post("/api/admin/products/<product_id>/image")
+def admin_upload_product_image(product_id):
+    require_admin()
+    upload = request.files.get("image")
+    data = upload.read(MAX_PRODUCT_IMAGE_BYTES + 1) if upload else b""
+    if not data:
+        raise ApiError(400, "Choose an image.")
+    if len(data) > MAX_PRODUCT_IMAGE_BYTES:
+        raise ApiError(400, "Images must be under 5 MB.")
+    extension = photo_extension(data)
+    if not extension:
+        raise ApiError(400, "Images must be JPEG, PNG, or WebP.")
+
+    with _catalog_lock:
+        products = read_products()
+        current = find_product(products, product_id)
+        PRODUCT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+        name = f"{uuid.uuid4().hex}.{extension}"
+        (PRODUCT_IMAGE_DIR / name).write_bytes(data)
+        delete_uploaded_image(current)
+        updated = {**current, "image": f"/product-images/{name}", "updatedAt": now_iso()}
+        products[products.index(current)] = updated
+        write_products(products)
+    return jsonify(updated)
+
+
+@app.get("/product-images/<name>")
+def product_image(name):
+    if not PRODUCT_IMAGE_PATTERN.match(name) or not (PRODUCT_IMAGE_DIR / name).is_file():
+        abort(404)
+    response = send_from_directory(PRODUCT_IMAGE_DIR, name)
+    # Each upload gets a new name, so a cached copy never goes stale.
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
 
 

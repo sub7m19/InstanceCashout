@@ -1,9 +1,7 @@
 const ACTIVE_ACCOUNT_KEY = "instanceCashoutActiveAccount";
 const ACCOUNT_PREFIX = "instanceCashoutAccount:";
-const WANTED_ITEMS_KEY = "instanceCashoutWantedItems";
 const CART_KEY = "instanceCashoutCart";
 const TABS = ["orders", "sell", "shipments", "payouts", "settings"];
-const CATEGORIES = ["Pokemon", "One Piece", "Sealed", "Slabs"];
 // Same-origin when main.py serves the site; set to the API's URL if the pages are hosted elsewhere.
 const API_BASE = "";
 
@@ -18,6 +16,7 @@ const accountDiscordId = $("#accountDiscordId");
 const accountCreatedAt = $("#accountCreatedAt");
 const accountLastLogin = $("#accountLastLogin");
 const logoutButton = $("#dashboardLogout");
+const adminLink = $("#adminLink");
 const summaryValue = $("#summaryValue");
 const cashoutSteps = document.querySelectorAll("#cashoutSteps .step");
 const stepHint = $("#stepHint");
@@ -31,11 +30,6 @@ const dashboardTabs = document.querySelectorAll(".tab");
 const dashboardPanels = document.querySelectorAll(".tab-panel");
 const wantedGrid = $("#wantedGrid");
 const wantedChips = $("#wantedChips");
-const wantedForm = $("#wantedForm");
-const openWantedFormButton = $("#openWantedForm");
-const cancelWantedFormButton = $("#cancelWantedForm");
-const wantedImage = $("#wantedImage");
-const wantedImagePreview = $("#wantedImagePreview");
 const wantedSearch = $("#wantedSearch");
 const wantedSort = $("#wantedSort");
 const cartBar = $("#cartBar");
@@ -49,7 +43,8 @@ const toast = $("#toast");
 
 let activeAccount = null;
 let wantedItems = [];
-let wantedImageData = "";
+let categories = [];
+let productsState = "loading";
 let activeWantedCategory = "all";
 let cart = {};
 let toastTimer = null;
@@ -72,52 +67,25 @@ function productImage(title, accent, secondary) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-const defaultWantedItems = [
-  {
-    id: "want-151-mini-tin",
-    name: "Pokemon 151 Mini Tin Collection 10 Pack",
-    category: "Pokemon",
-    upc: "151151151515",
-    retailer: "Sam's Club",
-    buyPrice: "$74.98",
-    cashout: 490,
-    quantity: 965,
-    image: productImage("151 Mini Tin", "#4bd7a8", "#f2c14e"),
-  },
-  {
-    id: "want-prismatic-etb",
-    name: "Prismatic Evolutions Elite Trainer Box",
-    category: "Sealed",
-    upc: "196214105195",
-    retailer: "Pokemon Center",
-    buyPrice: "$54.99",
-    cashout: 320,
-    quantity: 2047,
-    image: productImage("Prismatic ETB", "#8d6bff", "#4bd7a8"),
-  },
-  {
-    id: "want-destined-rivals",
-    name: "Pokemon Destined Rivals Booster Box",
-    category: "Pokemon",
-    upc: "196214111189",
-    retailer: "Target",
-    buyPrice: "$119.99",
-    cashout: 330,
-    quantity: 940,
-    image: productImage("Destined Rivals", "#f06a5b", "#5ea7ff"),
-  },
-  {
-    id: "want-blooming-waters",
-    name: "Pokemon 151 Blooming Waters Premium Collection",
-    category: "Sealed",
-    upc: "196214119017",
-    retailer: "Best Buy",
-    buyPrice: "$59.99",
-    cashout: 300,
-    quantity: 4070,
-    image: productImage("Blooming Waters", "#5ea7ff", "#4bd7a8"),
-  },
+// Products without a photo get generated art in one of these color pairs, picked from the id.
+const PLACEHOLDER_COLORS = [
+  ["#4bd7a8", "#f2c14e"],
+  ["#8d6bff", "#4bd7a8"],
+  ["#f06a5b", "#5ea7ff"],
+  ["#5ea7ff", "#4bd7a8"],
+  ["#f2c14e", "#f06a5b"],
 ];
+
+function productImageFor(item) {
+  if (item.image) {
+    return item.image;
+  }
+
+  const hash = [...String(item.id)].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) >>> 0, 7);
+  const [accent, secondary] = PLACEHOLDER_COLORS[hash % PLACEHOLDER_COLORS.length];
+  const shortName = String(item.name).replace(/^Pokemon\s+/i, "").split(/\s+/).slice(0, 2).join(" ");
+  return productImage(shortName, accent, secondary);
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -201,31 +169,23 @@ function showToast(message) {
 
 /* Buy list */
 
-function loadWantedItems() {
-  wantedItems = readJson(WANTED_ITEMS_KEY, null);
-
-  if (!Array.isArray(wantedItems)) {
-    wantedItems = defaultWantedItems;
-    saveWantedItems();
-    return;
+async function loadWantedItems() {
+  try {
+    const response = await fetch(`${API_BASE}/api/products`);
+    if (!response.ok) {
+      throw new Error(String(response.status));
+    }
+    const data = await response.json();
+    wantedItems = data.products;
+    categories = data.categories;
+    productsState = "ready";
+  } catch (error) {
+    productsState = "error";
   }
-
-  const defaultsById = Object.fromEntries(defaultWantedItems.map((item) => [item.id, item]));
-  const existingIds = new Set(wantedItems.map((item) => item.id));
-
-  wantedItems = wantedItems.map((item) =>
-    !item.image && defaultsById[item.id] ? { ...item, image: defaultsById[item.id].image } : item,
-  );
-  wantedItems.push(...defaultWantedItems.filter((item) => !existingIds.has(item.id)));
-  saveWantedItems();
-}
-
-function saveWantedItems() {
-  writeJson(WANTED_ITEMS_KEY, wantedItems);
 }
 
 function itemSpread(item) {
-  const retail = parseMoney(item.buyPrice);
+  const retail = Number(item.retailPrice);
   return retail ? Number(item.cashout) - retail : null;
 }
 
@@ -235,7 +195,7 @@ function renderWantedChips() {
     return result;
   }, {});
 
-  const chips = [["all", "All", wantedItems.length], ...CATEGORIES.map((name) => [name, name, counts[name] || 0])];
+  const chips = [["all", "All", wantedItems.length], ...categories.map((name) => [name, name, counts[name] || 0])];
 
   wantedChips.innerHTML = chips
     .map(
@@ -275,6 +235,16 @@ function renderWantedItems() {
 
   renderWantedChips();
 
+  if (productsState !== "ready") {
+    wantedGrid.innerHTML = productsState === "loading"
+      ? `<div class="card empty" style="grid-column: 1 / -1"><p>Loading the buy list…</p></div>`
+      : `<div class="card empty" style="grid-column: 1 / -1">
+          <h3>Couldn't load the buy list</h3>
+          <p>Check your connection and reload the page.</p>
+        </div>`;
+    return;
+  }
+
   if (!visibleItems.length) {
     wantedGrid.innerHTML = `
       <div class="card empty" style="grid-column: 1 / -1">
@@ -288,9 +258,7 @@ function renderWantedItems() {
     .map((item) => {
       const inCart = cart[item.id] || 0;
       const spread = itemSpread(item);
-      const image = item.image
-        ? `<img src="${escapeHtml(item.image)}" alt="" loading="lazy">`
-        : `<span>${escapeHtml(item.category)}</span>`;
+      const image = `<img src="${escapeHtml(productImageFor(item))}" alt="" loading="lazy">`;
 
       return `
         <article class="card product${inCart ? " in-cart" : ""}" data-id="${escapeHtml(item.id)}">
@@ -309,7 +277,7 @@ function renderWantedItems() {
                 <small>Cashout per unit</small>
                 <span class="cashout">${formatMoney(Number(item.cashout))}</span>
               </div>
-              ${spread !== null ? `<span class="spread" title="Retail ${escapeHtml(item.buyPrice)}">${spread >= 0 ? "+" : "−"}${formatMoney(Math.abs(spread))} vs retail</span>` : ""}
+              ${spread !== null ? `<span class="spread" title="Retail ${formatMoney(Number(item.retailPrice))}">${spread >= 0 ? "+" : "−"}${formatMoney(Math.abs(spread))} vs retail</span>` : ""}
             </div>
             <p class="product-meta">${Number(item.quantity).toLocaleString()} wanted</p>
             <div class="product-actions">
@@ -740,7 +708,9 @@ async function loadActiveAccount() {
     return;
   }
 
-  const account = upsertAccount(await response.json());
+  const user = await response.json();
+  adminLink.hidden = !user.isAdmin;
+  const account = upsertAccount(user);
   writeJson(accountKey(account.id), account);
   try {
     localStorage.setItem(ACTIVE_ACCOUNT_KEY, account.id);
@@ -1159,65 +1129,6 @@ async function openPhotoViewer(orderId) {
 wantedSearch.addEventListener("input", renderWantedItems);
 wantedSort.addEventListener("change", renderWantedItems);
 
-/* Buy-list admin form */
-
-function closeWantedForm() {
-  wantedForm.reset();
-  wantedImageData = "";
-  wantedImagePreview.removeAttribute("src");
-  wantedImagePreview.hidden = true;
-  wantedForm.hidden = true;
-  openWantedFormButton.hidden = false;
-}
-
-openWantedFormButton.addEventListener("click", () => {
-  wantedForm.hidden = false;
-  openWantedFormButton.hidden = true;
-  $("#wantedName").focus();
-});
-
-cancelWantedFormButton.addEventListener("click", closeWantedForm);
-
-wantedImage.addEventListener("change", () => {
-  const file = wantedImage.files?.[0];
-
-  if (!file) {
-    wantedImageData = "";
-    wantedImagePreview.hidden = true;
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.addEventListener("load", () => {
-    wantedImageData = String(reader.result);
-    wantedImagePreview.src = wantedImageData;
-    wantedImagePreview.hidden = false;
-  });
-  reader.readAsDataURL(file);
-});
-
-wantedForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-
-  const formData = new FormData(wantedForm);
-  wantedItems.unshift({
-    id: `want-${Date.now()}`,
-    name: String(formData.get("wantedName")).trim(),
-    category: String(formData.get("wantedCategory")),
-    upc: String(formData.get("wantedUpc")).trim(),
-    retailer: String(formData.get("wantedRetailer")).trim(),
-    buyPrice: String(formData.get("wantedBuyPrice")).trim(),
-    cashout: Number(formData.get("wantedCashout")) || 0,
-    quantity: Number(formData.get("wantedQuantity")) || 1,
-    image: wantedImageData || String(formData.get("wantedImageUrl")).trim(),
-  });
-
-  saveWantedItems();
-  closeWantedForm();
-  renderWantedItems();
-  showToast("Buy-list item saved.");
-});
-
 logoutButton.addEventListener("click", async () => {
   try {
     localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
@@ -1255,9 +1166,14 @@ document.querySelectorAll(".tabs, .chips").forEach((row) => {
   new MutationObserver(() => updateScrollFade(row)).observe(row, { childList: true });
 });
 
-loadWantedItems();
-loadCart();
 renderWantedItems();
-renderCart();
 activateTab(location.hash.slice(1), { updateHash: false });
-loadActiveAccount().then(syncShipments);
+loadActiveAccount()
+  .then(loadWantedItems)
+  .then(() => {
+    // The cart can only be checked against the buy list once it has loaded.
+    loadCart();
+    renderCart();
+    renderWantedItems();
+    syncShipments();
+  });

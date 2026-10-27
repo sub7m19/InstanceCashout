@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Admin | Instance Cashout</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101720'/%3E%3Cpath d='M18 14h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6Z' fill='%23f2c14e'/%3E%3Cpath d='M24 10h22a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6V16a6 6 0 0 1 6-6Z' fill='%234bd7a8'/%3E%3Cpath d='M27 20h16M27 31h20M27 42h12' stroke='%23101720' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
+    >
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="dashboard.css?v=8">
+    <link rel="stylesheet" href="admin.css?v=2">
+  </head>
+  <body>
+    <header class="dash-header">
+      <div class="admin-brand">
+        <a class="dash-brand" href="admin.html" aria-label="Instance Cashout admin">Instance Cashout</a>
+        <span class="admin-pill">Admin</span>
+      </div>
+      <nav aria-label="Account">
+        <a class="header-link member-view-link" href="dashboard.html" aria-label="Member view">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>Member view</span>
+        </a>
+        <button class="header-link" id="logoutButton" type="button">Log out</button>
+      </nav>
+    </header>
+
+    <main class="dash-main admin-main">
+      <!-- Shown to signed-in members who aren't admins (and tells you your id for the settings file). -->
+      <section class="card empty admin-denied" id="deniedState" hidden>
+        <h1>Admins only</h1>
+        <p>Your Discord account isn't on the admin list. To add it, put your Discord ID in <code>ADMIN_DISCORD_IDS</code> in the server's settings file, then restart.</p>
+        <p class="mono" id="deniedUserId"></p>
+        <a class="btn btn-secondary" href="dashboard.html">Back to dashboard</a>
+      </section>
+
+      <div id="adminApp" hidden>
+        <section class="admin-head">
+          <div>
+            <p class="label">Buy list</p>
+            <h1>Products</h1>
+            <p>What members can sell to you. Changes show on the member dashboard right away.</p>
+          </div>
+          <button class="btn btn-primary" type="button" id="newProductButton">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            New product
+          </button>
+        </section>
+
+        <section class="kpis" aria-label="Buy list totals">
+          <div class="card kpi" style="--tone: var(--green); --tone-soft: var(--green-soft)">
+            <span class="stat-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
+            <span class="stat-text"><span class="label">Live</span><strong id="kpiLive">–</strong></span>
+          </div>
+          <div class="card kpi" style="--tone: var(--gold); --tone-soft: var(--gold-soft)">
+            <span class="stat-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.7 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.2 3.2M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6M3 3l18 18M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+            </span>
+            <span class="stat-text"><span class="label">Hidden</span><strong id="kpiHidden">–</strong></span>
+          </div>
+          <div class="card kpi" style="--tone: var(--blue); --tone-soft: var(--blue-soft)">
+            <span class="stat-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg>
+            </span>
+            <span class="stat-text"><span class="label">Units wanted</span><strong id="kpiUnits">–</strong></span>
+          </div>
+          <div class="card kpi" style="--tone: var(--green); --tone-soft: var(--green-soft)">
+            <span class="stat-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </span>
+            <span class="stat-text"><span class="label">Top cashout</span><strong id="kpiTop">–</strong></span>
+          </div>
+        </section>
+
+        <section class="toolbar" aria-label="Filter products">
+          <label class="field toolbar-search">
+            <span class="visually-hidden">Search products</span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="searchInput" type="search" placeholder="Search name, UPC, retailer" autocomplete="off">
+            <kbd aria-hidden="true">/</kbd>
+          </label>
+          <div class="segmented" role="radiogroup" aria-label="Status" id="statusFilter">
+            <button type="button" role="radio" aria-checked="true" data-status="all">All <span id="countAll">0</span></button>
+            <button type="button" role="radio" aria-checked="false" data-status="live">Live <span id="countLive">0</span></button>
+            <button type="button" role="radio" aria-checked="false" data-status="hidden">Hidden <span id="countHidden">0</span></button>
+          </div>
+          <label class="field">
+            <span class="visually-hidden">Category</span>
+            <select id="categoryFilter">
+              <option value="all">All categories</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="visually-hidden">Sort</span>
+            <select id="sortSelect">
+              <option value="recent">Last edited</option>
+              <option value="cashout">Highest cashout</option>
+              <option value="spread">Best spread</option>
+              <option value="quantity">Most wanted</option>
+              <option value="name">Name A–Z</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="card admin-table-card" aria-live="polite">
+          <table class="data-table admin-table">
+            <thead>
+              <tr>
+                <th scope="col">Product</th>
+                <th scope="col">Category</th>
+                <th scope="col" class="num">Retail</th>
+                <th scope="col" class="num">Cashout</th>
+                <th scope="col" class="num">Spread</th>
+                <th scope="col" class="num">Wanted</th>
+                <th scope="col">Live</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody id="productRows"></tbody>
+          </table>
+          <div id="tableMessage"></div>
+        </section>
+        <p class="admin-hint">Tip: change a cashout or quantity right in the table, and press Enter to save it.</p>
+      </div>
+    </main>
+
+    <!-- Add / edit product -->
+    <dialog class="drawer" id="productDrawer" aria-labelledby="drawerTitle">
+      <form id="productForm" novalidate>
+        <div class="drawer-head">
+          <div>
+            <p class="label" id="drawerEyebrow">New product</p>
+            <h2 id="drawerTitle">Add to the buy list</h2>
+          </div>
+          <button class="icon-btn" type="button" data-drawer-close aria-label="Close">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+
+        <div class="drawer-body">
+          <div class="drawer-fields">
+            <fieldset class="form-section">
+              <legend>Product</legend>
+              <label class="field">
+                <span>Name</span>
+                <input id="fieldName" name="name" type="text" maxlength="120" placeholder="Surging Sparks Elite Trainer Box" required>
+              </label>
+              <p class="field-error" id="errorName" hidden></p>
+              <div class="form-row">
+                <label class="field">
+                  <span>Category</span>
+                  <select id="fieldCategory" name="category"></select>
+                </label>
+                <label class="field">
+                  <span>Retailer <em>optional</em></span>
+                  <input id="fieldRetailer" name="retailer" type="text" maxlength="60" placeholder="Target">
+                </label>
+              </div>
+              <label class="field">
+                <span>UPC / ID <em>optional</em></span>
+                <input id="fieldUpc" name="upc" type="text" maxlength="40" inputmode="numeric" autocomplete="off" placeholder="196214118392">
+              </label>
+            </fieldset>
+
+            <fieldset class="form-section">
+              <legend>Pricing</legend>
+              <div class="form-row">
+                <label class="field money">
+                  <span>Cashout per unit</span>
+                  <input id="fieldCashout" name="cashout" type="number" inputmode="decimal" min="0" step="0.01" placeholder="95" required>
+                </label>
+                <label class="field money">
+                  <span>Retail price <em>optional</em></span>
+                  <input id="fieldRetail" name="retailPrice" type="number" inputmode="decimal" min="0" step="0.01" placeholder="54.99">
+                </label>
+              </div>
+              <p class="field-error" id="errorCashout" hidden></p>
+              <p class="spread-note" id="spreadNote"></p>
+            </fieldset>
+
+            <fieldset class="form-section">
+              <legend>Availability</legend>
+              <div class="form-row">
+                <label class="field">
+                  <span>Units wanted</span>
+                  <input id="fieldQuantity" name="quantity" type="number" inputmode="numeric" min="0" step="1" value="1" required>
+                </label>
+                <div class="field">
+                  <span id="liveLabel">Show to members</span>
+                  <label class="switch switch-lg">
+                    <input id="fieldActive" name="active" type="checkbox" role="switch" aria-labelledby="liveLabel" checked>
+                    <span class="switch-track" aria-hidden="true"></span>
+                    <span class="switch-text" id="liveText">Live</span>
+                  </label>
+                </div>
+              </div>
+              <p class="field-error" id="errorQuantity" hidden></p>
+            </fieldset>
+
+            <fieldset class="form-section">
+              <legend>Image</legend>
+              <div class="dropzone" id="dropzone">
+                <input id="fieldImageFile" type="file" accept="image/jpeg,image/png,image/webp" class="visually-hidden">
+                <img id="imagePreview" alt="" hidden>
+                <div class="dropzone-text" id="dropzoneText">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+                  <strong>Drop an image, or <label for="fieldImageFile" class="link">choose a file</label></strong>
+                  <span>JPEG, PNG or WebP, up to 5 MB</span>
+                </div>
+                <div class="dropzone-actions" id="imageActions" hidden>
+                  <label for="fieldImageFile" class="btn btn-secondary btn-sm">Replace</label>
+                  <button class="btn btn-ghost btn-sm" type="button" id="removeImage">Remove</button>
+                </div>
+              </div>
+              <label class="field">
+                <span>Or image link <em>optional</em></span>
+                <input id="fieldImageUrl" type="url" inputmode="url" placeholder="https://…/product.jpg" autocomplete="off">
+              </label>
+              <p class="field-error" id="errorImage" hidden></p>
+            </fieldset>
+          </div>
+
+          <aside class="drawer-preview" aria-label="Member preview">
+            <p class="label">Member preview</p>
+            <div id="memberPreview"></div>
+            <p class="preview-note" id="previewNote"></p>
+          </aside>
+        </div>
+
+        <div class="drawer-foot">
+          <button class="btn btn-danger-ghost" type="button" id="deleteFromDrawer" hidden>Delete</button>
+          <div class="discard-bar" id="discardBar" hidden>
+            <span>Discard unsaved changes?</span>
+            <button class="btn btn-ghost btn-sm" type="button" id="keepEditing">Keep editing</button>
+            <button class="btn btn-danger btn-sm" type="button" id="discardChanges">Discard</button>
+          </div>
+          <div class="drawer-actions" id="drawerActions">
+            <button class="btn btn-secondary" type="button" data-drawer-close>Cancel</button>
+            <button class="btn btn-primary" type="submit" id="saveButton">Save product</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Delete confirmation -->
+    <dialog class="dialog confirm-dialog" id="confirmDialog" aria-labelledby="confirmTitle" aria-describedby="confirmText">
+      <div class="confirm-body">
+        <span class="confirm-icon" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>
+        </span>
+        <h2 id="confirmTitle">Delete this product?</h2>
+        <p id="confirmText"></p>
+      </div>
+      <div class="dialog-foot">
+        <button class="btn btn-secondary" type="button" id="confirmCancel">Cancel</button>
+        <button class="btn btn-danger" type="button" id="confirmDelete">Delete product</button>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="admin.js?v=1"></script>
+  </body>
+</html>

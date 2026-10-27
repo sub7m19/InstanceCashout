@@ -16,12 +16,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="dashboard.css?v=7">
+    <link rel="stylesheet" href="dashboard.css?v=8">
   </head>
   <body>
     <header class="dash-header">
       <a class="dash-brand" href="dashboard.html" aria-label="Instance Cashout dashboard">Instance Cashout</a>
       <nav aria-label="Account">
+        <a class="header-link" id="adminLink" href="admin.html" hidden>Admin</a>
         <button class="header-link optional" type="button" data-tab-link="settings">Settings</button>
         <button class="header-link" id="dashboardLogout" type="button">Log out</button>
       </nav>
@@ -121,58 +122,7 @@
                 <h2>Sell to us</h2>
                 <p>Choose sealed products from our buy list, set quantities, and submit one order.</p>
               </div>
-              <button class="btn btn-ghost" type="button" id="openWantedForm">+ Add buy-list item</button>
             </div>
-
-            <form class="card admin-form" id="wantedForm" hidden>
-              <h3>New buy-list item</h3>
-              <label class="field">
-                <span>Product name</span>
-                <input id="wantedName" name="wantedName" type="text" placeholder="Pokemon 151 Booster Bundle" required>
-              </label>
-              <label class="field">
-                <span>Category</span>
-                <select id="wantedCategory" name="wantedCategory">
-                  <option>Pokemon</option>
-                  <option>One Piece</option>
-                  <option>Sealed</option>
-                  <option>Slabs</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>UPC / ID</span>
-                <input id="wantedUpc" name="wantedUpc" type="text" placeholder="196214118392">
-              </label>
-              <label class="field">
-                <span>Retailer</span>
-                <input id="wantedRetailer" name="wantedRetailer" type="text" placeholder="Pokemon Center">
-              </label>
-              <label class="field">
-                <span>Retail price</span>
-                <input id="wantedBuyPrice" name="wantedBuyPrice" type="text" placeholder="$59.99">
-              </label>
-              <label class="field">
-                <span>Cashout per unit</span>
-                <input id="wantedCashout" name="wantedCashout" type="number" inputmode="numeric" min="0" step="1" placeholder="300" required>
-              </label>
-              <label class="field">
-                <span>Quantity wanted</span>
-                <input id="wantedQuantity" name="wantedQuantity" type="number" inputmode="numeric" min="1" step="1" value="1" required>
-              </label>
-              <label class="field">
-                <span>Image URL</span>
-                <input id="wantedImageUrl" name="wantedImageUrl" type="url" placeholder="https://…/product.jpg">
-              </label>
-              <label class="field">
-                <span>Or upload image</span>
-                <input id="wantedImage" name="wantedImage" type="file" accept="image/*">
-              </label>
-              <div class="admin-form-actions">
-                <img id="wantedImagePreview" class="admin-preview" alt="" hidden>
-                <button class="btn btn-primary" type="submit">Save item</button>
-                <button class="btn btn-secondary" type="button" id="cancelWantedForm">Cancel</button>
-              </div>
-            </form>
 
             <div class="sell-controls">
               <label class="field">
@@ -350,6 +300,6 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="dashboard.js?v=12"></script>
+    <script src="dashboard.js?v=13"></script>
   </body>
 </html>

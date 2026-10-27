@@ -19,6 +19,7 @@ os.environ["INSTANCE_ENV"] = os.path.join(UPLOADS, "no-settings.env")
 os.environ["PUBLIC_URL"] = "https://cashout.test"
 os.environ["DISCORD_CLIENT_ID"] = "client-id"
 os.environ["DISCORD_CLIENT_SECRET"] = "client-secret"
+os.environ["ADMIN_DISCORD_IDS"] = "900"
 
 import main  # noqa: E402
 
@@ -42,7 +43,7 @@ class AppTest(unittest.TestCase):
         self.assertTrue(self.client.get("/api/health").get_json()["ok"])
 
     def test_pages_are_served(self):
-        for path in ("/", "/dashboard.html", "/styles.css", "/dashboard.css", "/script.js", "/dashboard.js"):
+        for path in ("/", "/dashboard.html", "/admin.html", "/styles.css", "/dashboard.css", "/admin.css", "/script.js", "/dashboard.js", "/admin.js"):
             with self.subTest(path=path):
                 self.assertEqual(self.status(path), 200)
 
@@ -126,6 +127,73 @@ class DiscordLoginTest(unittest.TestCase):
         self.start_login()
         response = self.client.get("/auth/discord/callback?error=access_denied")
         self.assertEqual(response.headers["Location"], "/?login=cancelled")
+
+
+
+ADMIN = {"Authorization": "Bearer dev:900", "X-Requested-With": "fetch"}
+MEMBER = {"Authorization": "Bearer dev:123", "X-Requested-With": "fetch"}
+
+
+class CatalogTest(unittest.TestCase):
+    def setUp(self):
+        self.client = main.app.test_client()
+        main.PRODUCTS_FILE.unlink(missing_ok=True)
+        shutil.rmtree(main.PRODUCT_IMAGE_DIR, ignore_errors=True)
+
+    def create(self, **fields):
+        body = {"name": "Surging Sparks ETB", "category": "Sealed", "cashout": 95, "quantity": 40, **fields}
+        response = self.client.post("/api/admin/products", headers=ADMIN, json=body)
+        self.assertEqual(response.status_code, 201, response.get_json())
+        return response.get_json()
+
+    def member_product_ids(self):
+        return [p["id"] for p in self.client.get("/api/products", headers=MEMBER).get_json()["products"]]
+
+    def test_members_see_the_starter_list(self):
+        self.assertEqual(len(self.member_product_ids()), 4)
+
+    def test_only_admins_can_change_products(self):
+        self.assertEqual(self.client.get("/api/admin/products", headers=MEMBER).status_code, 403)
+        self.assertEqual(self.client.post("/api/admin/products", headers=MEMBER, json={"name": "x"}).status_code, 403)
+        # Without the custom header (e.g. a form on another site) even an admin is refused.
+        self.assertEqual(self.client.post("/api/admin/products", headers={"Authorization": "Bearer dev:900"}, json={}).status_code, 403)
+
+    def test_create_edit_hide_and_delete(self):
+        product = self.create(retailPrice="49.99")
+        self.assertEqual((product["retailPrice"], product["active"]), (49.99, True))
+        self.assertIn(product["id"], self.member_product_ids())
+
+        updated = self.client.patch(f"/api/admin/products/{product['id']}", headers=ADMIN, json={"cashout": 110, "active": False}).get_json()
+        self.assertEqual((updated["cashout"], updated["active"], updated["name"]), (110, False, "Surging Sparks ETB"))
+        self.assertNotIn(product["id"], self.member_product_ids())
+
+        self.assertEqual(self.client.delete(f"/api/admin/products/{product['id']}", headers=ADMIN).status_code, 204)
+        self.assertEqual(self.client.patch(f"/api/admin/products/{product['id']}", headers=ADMIN, json={}).status_code, 404)
+
+    def test_rejects_bad_fields(self):
+        for body in ({"name": "", "category": "Sealed", "cashout": 1, "quantity": 1},
+                     {"name": "x", "category": "Toys", "cashout": 1, "quantity": 1},
+                     {"name": "x", "category": "Sealed", "cashout": -5, "quantity": 1},
+                     {"name": "x", "category": "Sealed", "cashout": 1, "quantity": 1, "image": "javascript:alert(1)"}):
+            with self.subTest(body=body):
+                self.assertEqual(self.client.post("/api/admin/products", headers=ADMIN, json=body).status_code, 400)
+
+    def test_image_upload_replaces_old_file(self):
+        product = self.create()
+        first = self.client.post(f"/api/admin/products/{product['id']}/image", headers=ADMIN,
+                                 data={"image": (io.BytesIO(PNG), "a.png")}).get_json()["image"]
+        self.assertEqual(self.status(first), 200)
+        second = self.client.post(f"/api/admin/products/{product['id']}/image", headers=ADMIN,
+                                  data={"image": (io.BytesIO(PNG), "b.png")}).get_json()["image"]
+        self.assertNotEqual(first, second)
+        self.assertEqual(self.status(first), 404)
+        bad = self.client.post(f"/api/admin/products/{product['id']}/image", headers=ADMIN,
+                               data={"image": (io.BytesIO(b"not an image"), "x.png")})
+        self.assertEqual(bad.status_code, 400)
+
+    def status(self, path):
+        with self.client.get(path) as response:
+            return response.status_code
 
 
 if __name__ == "__main__":
