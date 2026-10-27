@@ -7,17 +7,8 @@ const STATE_KEY = "instanceCashoutDiscordState";
 const ACTIVE_ACCOUNT_KEY = "instanceCashoutActiveAccount";
 const ACCOUNT_PREFIX = "instanceCashoutAccount:";
 
-const form = document.querySelector("#quoteForm");
-const output = document.querySelector("#messageOutput");
 const loginButton = document.querySelector("#discordLogin");
-const logoutButton = document.querySelector("#logoutButton");
 const authStatus = document.querySelector("#authStatus");
-
-let activeAccount = null;
-
-function setAuthenticated(isAuthenticated) {
-  document.body.classList.toggle("auth-locked", !isAuthenticated);
-}
 
 function makeState() {
   const bytes = new Uint8Array(16);
@@ -117,20 +108,12 @@ function upsertAccount(user) {
 
   localStorage.setItem(accountKey(user.id), JSON.stringify(account));
   localStorage.setItem(ACTIVE_ACCOUNT_KEY, user.id);
-  activeAccount = account;
   return account;
 }
 
-function saveActiveAccount() {
-  if (!activeAccount) {
-    return;
-  }
-
-  localStorage.setItem(accountKey(activeAccount.id), JSON.stringify(activeAccount));
-}
-
 function openDashboard() {
-  window.location.href = "dashboard.html";
+  // replace() so Back from the dashboard doesn't land on this page and bounce forward again.
+  window.location.replace("dashboard.html");
 }
 
 function createDemoDiscordAccount() {
@@ -149,31 +132,25 @@ async function bootAuthGate() {
   const authenticated = hasCallback || sessionStorage.getItem(SESSION_KEY) === "authenticated";
 
   if (!authenticated || !accessToken) {
-    setAuthenticated(false);
     return;
   }
 
-  // Coming back from Discord: stay on the splash until the dashboard opens, so the
-  // signed-in homepage doesn't flash in between.
-  if (hasCallback) {
-    authStatus.textContent = "Signing you in…";
-  } else {
-    setAuthenticated(true);
+  // Already signed in: this page is only the login, so go straight to the dashboard.
+  if (!hasCallback) {
+    openDashboard();
+    return;
   }
+
+  authStatus.textContent = "Signing you in…";
 
   try {
     const user = await fetchDiscordUser(accessToken);
     upsertAccount(user);
-
-    if (hasCallback) {
-      openDashboard();
-    }
+    openDashboard();
   } catch (error) {
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
-    activeAccount = null;
-    setAuthenticated(false);
     authStatus.textContent = "Your Discord session expired. Please sign in again.";
   }
 }
@@ -194,37 +171,4 @@ function startDiscordLogin() {
 
 loginButton.addEventListener("click", startDiscordLogin);
 
-logoutButton.addEventListener("click", () => {
-  sessionStorage.removeItem(SESSION_KEY);
-  sessionStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
-  activeAccount = null;
-  setAuthenticated(false);
-  window.scrollTo({ top: 0, behavior: "auto" });
-});
-
 bootAuthGate();
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-
-  const cardType = document.querySelector("#cardType").value;
-  const collectionSize = document.querySelector("#collectionSize").value.trim() || "Not sure yet";
-  const estimatedValue = document.querySelector("#estimatedValue").value.trim() || "Not sure yet";
-  const notes = document.querySelector("#notes").value.trim() || "No extra notes yet";
-
-  if (activeAccount) {
-    activeAccount.quoteDrafts.unshift({
-      cardType,
-      collectionSize,
-      estimatedValue,
-      notes,
-      createdAt: new Date().toISOString(),
-    });
-    activeAccount.quoteDrafts = activeAccount.quoteDrafts.slice(0, 10);
-    saveActiveAccount();
-  }
-
-  output.textContent = `Quote request ready:\n\nCard type: ${cardType}\nCollection size: ${collectionSize}\nEstimated value: ${estimatedValue}\nNotes: ${notes}\n\nPlease send photos of the fronts, backs, and any grade labels for the fastest offer.`;
-  output.classList.add("visible");
-});
