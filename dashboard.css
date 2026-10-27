@@ -1170,11 +1170,13 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* The track is the full round; the fill is the share still left. The track has to be
+   visible against the card, or a small fill reads as a stray line instead of "10% left". */
 .stock-bar {
-  background: var(--surface-2);
+  background: rgba(255, 250, 240, 0.12);
   border-radius: 999px;
   display: block;
-  height: 4px;
+  height: 6px;
   overflow: hidden;
 }
 
@@ -1189,6 +1191,10 @@ button {
 .stock.is-low .product-meta,
 .stock.is-low strong {
   color: var(--gold);
+}
+
+.stock.is-low .stock-bar {
+  background: rgba(242, 193, 78, 0.18);
 }
 
 .stock.is-low .stock-bar span {
