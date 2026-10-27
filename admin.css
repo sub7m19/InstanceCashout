@@ -724,6 +724,46 @@
   color: #fff;
 }
 
+/* Units left and restock */
+
+.left-note {
+  color: var(--text-faint);
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
+  white-space: nowrap;
+}
+
+.badge-claimed {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+
+/* A fully claimed product's restock button stands out */
+.row-actions .icon-btn.restock-hint {
+  color: var(--gold);
+}
+
+.row-actions .icon-btn.restock-hint:hover {
+  background: var(--gold-soft);
+}
+
+.restock-icon {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.restock-field {
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+#restockDialog .field-error {
+  color: var(--red);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
 /* Products | Orders tabs */
 
 .admin-tabs {

@@ -6,6 +6,7 @@ import io
 import os
 import shutil
 import tempfile
+import threading
 import unittest
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
@@ -86,14 +87,73 @@ class OrderTest(unittest.TestCase):
         order = response.get_json()
         self.assertEqual((order["id"], order["total"], order["status"]), ("ORD-00001", 1470, "submitted"))
         self.assertEqual(order["items"], [{"productId": "want-151-mini-tin", "name": "Pokemon 151 Mini Tin Collection 10 Pack",
-                                           "cashout": 490, "quantity": 3}])
+                                           "cashout": 490, "quantity": 3, "round": 1}])
         self.assertEqual(self.place_order([{"id": "want-prismatic-etb", "quantity": 1}]).get_json()["id"], "ORD-00002")
 
     def test_rejects_hidden_unknown_and_too_many(self):
         self.assertEqual(self.place_order([{"id": "sample-journey-together-bundle", "quantity": 1}]).status_code, 409)
         self.assertEqual(self.place_order([{"id": "nope", "quantity": 1}]).status_code, 409)
-        self.assertEqual(self.place_order([{"id": "sample-charizard-psa10", "quantity": 6}]).status_code, 400)
+        too_many = self.place_order([{"id": "sample-charizard-psa10", "quantity": 6}])
+        self.assertEqual(too_many.status_code, 409)
+        self.assertEqual(too_many.get_json()["remaining"], {"sample-charizard-psa10": 5})
         self.assertEqual(self.place_order([]).status_code, 400)
+
+    def remaining(self, product_id):
+        products = self.client.get("/api/admin/products", headers=ADMIN).get_json()["products"]
+        return next(product["remaining"] for product in products if product["id"] == product_id)
+
+    def test_rush_is_first_come_first_served(self):
+        # 25 members order 1 unit each of a product wanting 10, all at the same moment.
+        product = self.client.post("/api/admin/products", headers=ADMIN, json={
+            "name": "Drop", "category": "Sealed", "cashout": 50, "quantity": 10}).get_json()
+        results = []
+        start = threading.Barrier(25)
+
+        def member(n):
+            client = main.app.test_client()
+            start.wait()
+            response = client.post("/api/orders", headers={"Authorization": f"Bearer dev:{1000 + n}"},
+                                   json={"items": [{"id": product["id"], "quantity": 1}]})
+            results.append(response.status_code)
+
+        threads = [threading.Thread(target=member, args=(n,)) for n in range(25)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(results.count(201), 10)
+        self.assertEqual(results.count(409), 15)
+        self.assertEqual(self.remaining(product["id"]), 0)
+        refused = self.place_order([{"id": product["id"], "quantity": 1}]).get_json()
+        self.assertEqual(refused["error"], "Drop is fully claimed.")
+
+    def test_cancel_frees_units_and_restock_starts_a_new_round(self):
+        order = self.place_order([{"id": "sample-charizard-psa10", "quantity": 5}]).get_json()
+        self.assertEqual(self.remaining("sample-charizard-psa10"), 0)
+
+        self.client.patch(f"/api/admin/orders/{order['id']}", headers=ADMIN, json={"status": "cancelled"})
+        self.assertEqual(self.remaining("sample-charizard-psa10"), 5)
+        self.client.patch(f"/api/admin/orders/{order['id']}", headers=ADMIN, json={"status": "submitted"})
+        self.assertEqual(self.remaining("sample-charizard-psa10"), 0)
+
+        # The next day: 3 more. Earlier orders stay, but don't count against the new round.
+        restocked = self.client.post("/api/admin/products/sample-charizard-psa10/restock", headers=ADMIN, json={"quantity": 3}).get_json()
+        self.assertEqual((restocked["round"], restocked["quantity"], restocked["remaining"]), (2, 3, 3))
+        self.assertEqual(self.place_order([{"id": "sample-charizard-psa10", "quantity": 3}]).status_code, 201)
+        self.assertEqual(self.remaining("sample-charizard-psa10"), 0)
+        self.assertEqual(self.client.post("/api/admin/products/sample-charizard-psa10/restock", headers=MEMBER, json={"quantity": 3}).status_code, 403)
+        self.assertEqual(self.client.post("/api/admin/products/sample-charizard-psa10/restock", headers=ADMIN, json={"quantity": 0}).status_code, 400)
+
+    def test_buy_list_answers_not_modified_when_nothing_changed(self):
+        first = self.client.get("/api/products", headers=AUTH)
+        etag = first.headers["ETag"]
+        self.assertEqual(self.client.get("/api/products", headers={**AUTH, "If-None-Match": etag}).status_code, 304)
+        self.place_order([{"id": "want-151-mini-tin", "quantity": 1}])
+        changed = self.client.get("/api/products", headers={**AUTH, "If-None-Match": etag})
+        self.assertEqual(changed.status_code, 200)
+        mini_tin = next(p for p in changed.get_json()["products"] if p["id"] == "want-151-mini-tin")
+        self.assertEqual((mini_tin["claimed"], mini_tin["remaining"]), (1, 964))
 
     def test_ship_then_admin_moves_it_along(self):
         order_id = self.place_order([{"id": "want-151-mini-tin", "quantity": 1}]).get_json()["id"]

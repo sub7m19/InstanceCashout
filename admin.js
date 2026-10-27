@@ -148,7 +148,7 @@ function visibleProducts() {
         case "spread":
           return (spreadOf(b) ?? -Infinity) - (spreadOf(a) ?? -Infinity);
         case "quantity":
-          return b.quantity - a.quantity;
+          return b.remaining - a.remaining;
         case "name":
           return a.name.localeCompare(b.name);
         default:
@@ -161,7 +161,7 @@ function renderKpis() {
   const live = products.filter((product) => product.active);
   $("#kpiLive").textContent = live.length;
   $("#kpiHidden").textContent = products.length - live.length;
-  $("#kpiUnits").textContent = live.reduce((sum, product) => sum + product.quantity, 0).toLocaleString();
+  $("#kpiUnits").textContent = live.reduce((sum, product) => sum + product.remaining, 0).toLocaleString();
   $("#kpiTop").textContent = live.length ? formatMoney(Math.max(...live.map((product) => product.cashout))) : "–";
   $("#countAll").textContent = products.length;
   $("#countLive").textContent = live.length;
@@ -199,11 +199,12 @@ function rowHtml(product, index) {
         </span>
       </td>
       <td class="num spread-cell">${spreadCell(product)}</td>
-      <td class="num wanted-td" data-label="Wanted">
+      <td class="num wanted-td" data-label="Units">
         <span class="inline-edit">
           <input type="number" inputmode="numeric" min="0" step="1" value="${product.quantity}"
-            data-inline="quantity" aria-label="Units wanted for ${escapeHtml(product.name)}">
+            data-inline="quantity" aria-label="Units to fill for ${escapeHtml(product.name)}">
         </span>
+        <span class="left-note">${leftNote(product)}</span>
       </td>
       <td class="live-td">
         <label class="switch">
@@ -215,6 +216,9 @@ function rowHtml(product, index) {
       </td>
       <td class="actions-td">
         <div class="row-actions">
+          <button class="icon-btn${product.remaining <= 0 ? " restock-hint" : ""}" type="button" data-restock aria-label="Restock ${escapeHtml(product.name)}" title="Restock: start a new round">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>
+          </button>
           <button class="icon-btn" type="button" data-edit aria-label="Edit ${escapeHtml(product.name)}">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           </button>
@@ -224,6 +228,13 @@ function rowHtml(product, index) {
         </div>
       </td>
     </tr>`;
+}
+
+function leftNote(product) {
+  if (product.remaining <= 0) {
+    return `<span class="badge badge-claimed">Fully claimed</span>`;
+  }
+  return `${product.remaining.toLocaleString()} left${product.claimed ? ` · ${product.claimed.toLocaleString()} claimed` : ""}`;
 }
 
 function renderTable() {
@@ -335,6 +346,7 @@ async function saveInline(input) {
     renderKpis();
     // Update just this row's spread so focus isn't lost while tabbing through the table.
     row.querySelector(".spread-cell").innerHTML = spreadCell(updated);
+    row.querySelector(".left-note").innerHTML = leftNote(updated);
     input.value = key === "quantity" ? updated[key] : formatAmount(updated[key]);
     wrapper.classList.remove("is-saving");
     wrapper.classList.add("is-saved");
@@ -399,7 +411,9 @@ productRows.addEventListener("click", (event) => {
   if (!row) return;
   const product = products.find((entry) => entry.id === row.dataset.id);
 
-  if (event.target.closest("[data-edit]")) {
+  if (event.target.closest("[data-restock]")) {
+    openRestock(product);
+  } else if (event.target.closest("[data-edit]")) {
     openDrawer(product);
   } else if (event.target.closest("[data-delete]")) {
     askDelete(product);
@@ -494,6 +508,10 @@ function openDrawer(product) {
   $("#drawerTitle").textContent = product ? product.name : "Add to the buy list";
   $("#saveButton").textContent = product ? "Save changes" : "Add product";
   $("#deleteFromDrawer").hidden = !product;
+  $("#restockFromDrawer").hidden = !product;
+  $("#stockNote").innerHTML = product
+    ? `Round ${product.round}: ${product.claimed.toLocaleString()} claimed, ${product.remaining.toLocaleString()} left. Use <strong>Restock</strong> to start a fresh round.`
+    : "";
 
   fields.name.value = product?.name ?? "";
   fields.category.value = product?.category ?? categories[0];
@@ -758,6 +776,7 @@ function showDiscardBar(show) {
   $("#discardBar").hidden = !show;
   $("#drawerActions").hidden = show;
   $("#deleteFromDrawer").hidden = show || !editing;
+  $("#restockFromDrawer").hidden = show || !editing;
 }
 
 function requestClose() {
@@ -794,6 +813,58 @@ $("#discardChanges").addEventListener("click", () => drawer.close());
 drawer.addEventListener("close", () => setPendingFile(null));
 
 $("#deleteFromDrawer").addEventListener("click", () => askDelete(editing));
+$("#restockFromDrawer").addEventListener("click", () => openRestock(editing));
+
+/* Restock: a new round of units, first come first served again */
+
+const restockDialog = $("#restockDialog");
+let restocking = null;
+
+function openRestock(product) {
+  restocking = product;
+  $("#restockTitle").textContent = `Restock ${product.name}`;
+  $("#restockText").textContent = product.remaining > 0
+    ? `${product.remaining} of ${product.quantity} are still open in this round. Restocking replaces them with a fresh count. Earlier orders stay in Orders.`
+    : `All ${product.quantity} units were claimed. Start a fresh round; members claim them first come, first served. Earlier orders stay in Orders.`;
+  $("#restockQuantity").value = product.quantity;
+  $("#restockQuantity").removeAttribute("aria-invalid");
+  $("#restockError").hidden = true;
+  restockDialog.showModal();
+  $("#restockQuantity").select();
+}
+
+$("#restockCancel").addEventListener("click", () => restockDialog.close());
+
+$("#restockForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const quantity = Number($("#restockQuantity").value);
+
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    $("#restockQuantity").setAttribute("aria-invalid", "true");
+    $("#restockError").textContent = "Enter a whole number of units (1 or more).";
+    $("#restockError").hidden = false;
+    $("#restockQuantity").focus();
+    return;
+  }
+
+  const button = $("#restockSubmit");
+  button.disabled = true;
+  button.textContent = "Restocking…";
+
+  try {
+    const updated = await api("POST", `/api/admin/products/${encodeURIComponent(restocking.id)}/restock`, { quantity });
+    replaceProduct(updated);
+    restockDialog.close();
+    if (drawer.open) drawer.close();
+    render();
+    showToast(`${updated.name} restocked: ${updated.remaining} units open to members.`);
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Restock";
+  }
+});
 
 /* Confirmation */
 
@@ -1299,5 +1370,30 @@ orderDrawer.addEventListener("click", (event) => {
 orderDrawer.addEventListener("close", () => {
   openOrderId = null;
 });
+
+/* Live refresh: keep counts current during a rush, without interrupting edits */
+
+async function refreshQuietly() {
+  const busy = document.visibilityState !== "visible" || drawer.open || confirmDialog.open || restockDialog.open
+    || document.activeElement?.matches?.("[data-inline], #searchInput, #orderSearch");
+  if (busy || loadState !== "ready") return;
+
+  try {
+    const [productData, orderData] = await Promise.all([api("GET", "/api/admin/products"), api("GET", "/api/admin/orders")]);
+    if (JSON.stringify(productData.products) !== JSON.stringify(products)) {
+      products = productData.products;
+      render();
+    }
+    if (JSON.stringify(orderData.orders) !== JSON.stringify(orders)) {
+      orders = orderData.orders;
+      renderOrders();
+      if (openOrderId && orderDrawer.open) renderOrderDrawer();
+    }
+  } catch (error) {
+    // Try again next time.
+  }
+}
+
+setInterval(refreshQuietly, 10000);
 
 start();

@@ -122,15 +122,16 @@ app.config.update(
 
 
 class ApiError(Exception):
-    def __init__(self, status, message):
+    def __init__(self, status, message, **details):
         super().__init__(message)
         self.status = status
         self.message = message
+        self.details = details  # extra fields for the page, e.g. what's left of each product
 
 
 @app.errorhandler(ApiError)
 def handle_api_error(error):
-    return jsonify(error=error.message), error.status
+    return jsonify(error=error.message, **error.details), error.status
 
 
 @app.errorhandler(413)
@@ -263,6 +264,45 @@ def read_orders():
     return json.loads(ORDERS_FILE.read_text(encoding="utf-8"))
 
 
+def count_claimed(orders):
+    """Units claimed per (product, round) by orders that aren't cancelled."""
+    claimed = {}
+    for order in orders:
+        if order["status"] == "cancelled":
+            continue
+        for item in order["items"]:
+            key = (item["productId"], item.get("round", 1))
+            claimed[key] = claimed.get(key, 0) + item["quantity"]
+    return claimed
+
+
+_claimed_cache = (None, {})
+
+
+def claimed_now():
+    """count_claimed for the saved orders, reused until the orders file changes.
+
+    Members' dashboards ask for the buy list every few seconds, so this saves re-reading
+    every order on each of those requests.
+    """
+    global _claimed_cache
+    try:
+        stat = ORDERS_FILE.stat()
+    except FileNotFoundError:
+        return {}
+    key = (stat.st_mtime_ns, stat.st_size)
+    if _claimed_cache[0] != key:
+        _claimed_cache = (key, count_claimed(read_orders()))
+    return _claimed_cache[1]
+
+
+def with_stock(product, claimed):
+    """The product plus how many units are claimed and left in its current round."""
+    product_round = product.get("round", 1)
+    taken = claimed.get((product["id"], product_round), 0)
+    return {**product, "round": product_round, "claimed": taken, "remaining": max(0, product["quantity"] - taken)}
+
+
 def find_order(orders, order_id, user_id=None):
     for order in orders:
         if order["id"] == order_id and (user_id is None or order["userId"] == user_id):
@@ -301,28 +341,43 @@ def create_order():
     if not isinstance(lines, list) or not lines or len(lines) > MAX_ORDER_LINES:
         raise ApiError(400, "Add at least one item to your order.")
 
-    # Prices come from the buy list, never from the browser.
-    catalog = {product["id"]: product for product in read_products() if product.get("active", True)}
     quantities = {}
     for line in lines:
-        product = catalog.get(str((line or {}).get("id")))
-        if not product:
-            raise ApiError(409, "An item in your order is no longer on the buy list. Refresh and try again.")
         try:
-            quantity = int(line.get("quantity"))
+            quantity = int((line or {}).get("quantity"))
         except (TypeError, ValueError):
             raise ApiError(400, "Quantities must be whole numbers.")
-        quantities[product["id"]] = quantities.get(product["id"], 0) + quantity
+        if quantity < 1:
+            raise ApiError(400, "Quantities must be at least 1.")
+        product_id = str(line.get("id"))
+        quantities[product_id] = quantities.get(product_id, 0) + quantity
 
-    items = []
-    for product_id, quantity in quantities.items():
-        product = catalog[product_id]
-        if quantity < 1 or quantity > product["quantity"]:
-            raise ApiError(400, f"We're buying up to {product['quantity']} of {product['name']}.")
-        items.append({"productId": product_id, "name": product["name"], "cashout": product["cashout"], "quantity": quantity})
-
+    # First come, first served: orders are checked and saved one at a time, against what's
+    # left in this round, so two members can never claim the same units.
     with _orders_lock:
         orders = read_orders()
+        claimed = count_claimed(orders)
+        # Prices come from the buy list, never from the browser.
+        catalog = {product["id"]: with_stock(product, claimed) for product in read_products() if product.get("active", True)}
+
+        items = []
+        short = {}
+        for product_id, quantity in quantities.items():
+            product = catalog.get(product_id)
+            if not product:
+                raise ApiError(409, "An item in your order is no longer on the buy list. Refresh and try again.")
+            if quantity > product["remaining"]:
+                short[product_id] = product["remaining"]
+                continue
+            items.append({"productId": product_id, "name": product["name"], "cashout": product["cashout"],
+                          "quantity": quantity, "round": product["round"]})
+
+        if short:
+            first = catalog[next(iter(short))]
+            message = (f"{first['name']} is fully claimed." if not first["remaining"]
+                       else f"Only {first['remaining']} of {first['name']} left.")
+            raise ApiError(409, message, remaining=short)
+
         number = max((int(order["id"].removeprefix("ORD-")) for order in orders), default=0) + 1
         order = {
             "id": f"ORD-{number:05d}",
@@ -451,7 +506,9 @@ def now_iso():
 
 def read_products():
     if not PRODUCTS_FILE.is_file():
-        return [{"image": None, "active": True, **product, "updatedAt": now_iso()} for product in DEFAULT_PRODUCTS]
+        # A fixed time, so the starter list is identical on every request (dashboards compare it).
+        return [{"image": None, "active": True, **product, "updatedAt": "2026-10-26T00:00:00+00:00"}
+                for product in DEFAULT_PRODUCTS]
     return json.loads(PRODUCTS_FILE.read_text(encoding="utf-8"))
 
 
@@ -540,14 +597,20 @@ def delete_uploaded_image(product):
 @app.get("/api/products")
 def list_products():
     current_user_id()
-    products = [product for product in read_products() if product.get("active", True)]
-    return jsonify(products=products, categories=CATEGORIES)
+    claimed = claimed_now()
+    products = [with_stock(product, claimed) for product in read_products() if product.get("active", True)]
+    response = jsonify(products=products, categories=CATEGORIES)
+    # Dashboards check every few seconds; when nothing changed they get a tiny "304 Not Modified".
+    response.headers["Cache-Control"] = "no-cache"
+    response.add_etag()
+    return response.make_conditional(request)
 
 
 @app.get("/api/admin/products")
 def admin_list_products():
     require_admin()
-    return jsonify(products=read_products(), categories=CATEGORIES)
+    claimed = claimed_now()
+    return jsonify(products=[with_stock(product, claimed) for product in read_products()], categories=CATEGORIES)
 
 
 @app.post("/api/admin/products")
@@ -555,10 +618,25 @@ def admin_create_product():
     require_admin()
     with _catalog_lock:
         products = read_products()
-        product = {"id": f"prod-{uuid.uuid4().hex[:12]}", **clean_product(request.get_json(silent=True) or {})}
+        product = {"id": f"prod-{uuid.uuid4().hex[:12]}", "round": 1, **clean_product(request.get_json(silent=True) or {})}
         products.insert(0, product)
         write_products(products)
-    return jsonify(product), 201
+    return jsonify(with_stock(product, claimed_now())), 201
+
+
+@app.post("/api/admin/products/<product_id>/restock")
+def admin_restock_product(product_id):
+    """Starts a new round: a fresh number of units to fill, first come first served again."""
+    require_admin()
+    quantity = number_field(request.get_json(silent=True) or {}, "quantity", minimum=1, integer=True)
+    with _catalog_lock:
+        products = read_products()
+        current = find_product(products, product_id)
+        updated = {**current, "round": current.get("round", 1) + 1, "quantity": quantity, "active": True,
+                   "restockedAt": now_iso(), "updatedAt": now_iso()}
+        products[products.index(current)] = updated
+        write_products(products)
+    return jsonify(with_stock(updated, claimed_now()))
 
 
 @app.patch("/api/admin/products/<product_id>")
@@ -573,7 +651,7 @@ def admin_update_product(product_id):
             delete_uploaded_image(current)
         products[products.index(current)] = updated
         write_products(products)
-    return jsonify(updated)
+    return jsonify(with_stock(updated, claimed_now()))
 
 
 @app.delete("/api/admin/products/<product_id>")
@@ -611,7 +689,7 @@ def admin_upload_product_image(product_id):
         updated = {**current, "image": f"/product-images/{name}", "updatedAt": now_iso()}
         products[products.index(current)] = updated
         write_products(products)
-    return jsonify(updated)
+    return jsonify(with_stock(updated, claimed_now()))
 
 
 @app.get("/product-images/<name>")

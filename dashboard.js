@@ -172,20 +172,79 @@ function showToast(message) {
 
 /* Buy list */
 
+// The buy list refreshes every few seconds while the page is open, so "units left" stays live
+// during a rush. The server answers "nothing changed" cheaply (ETag), so this stays light.
+const BUY_LIST_REFRESH_MS = 5000;
+let lastBuyList = "";
+
 async function loadWantedItems() {
   try {
-    const response = await fetch(`${API_BASE}/api/products`);
+    // "no-cache": the browser asks the server whether the list changed before reusing it.
+    const response = await fetch(`${API_BASE}/api/products`, { cache: "no-cache" });
     if (!response.ok) {
       throw new Error(String(response.status));
     }
-    const data = await response.json();
+    const text = await response.text();
+    if (text === lastBuyList) {
+      return false;
+    }
+    lastBuyList = text;
+    const data = JSON.parse(text);
     wantedItems = data.products;
     categories = data.categories;
     productsState = "ready";
+    return true;
   } catch (error) {
-    productsState = "error";
+    // Keep showing the last list if a refresh fails; only the first load shows an error.
+    if (productsState !== "ready") {
+      productsState = "error";
+    }
+    return false;
   }
 }
+
+// Lower anything in the cart that's no longer available. Returns a message for the member.
+function fitCartToStock() {
+  const notes = [];
+
+  for (const [id, quantity] of Object.entries(cart)) {
+    const item = wantedItems.find((entry) => entry.id === id);
+    const left = item ? item.remaining : 0;
+
+    if (quantity > left) {
+      if (left > 0) {
+        cart[id] = left;
+        notes.push(`only ${left} of ${item.name} left`);
+      } else {
+        delete cart[id];
+        notes.push(`${item ? item.name : "an item"} is fully claimed`);
+      }
+    }
+  }
+
+  if (notes.length) {
+    writeJson(CART_KEY, cart);
+    return `Your order was updated: ${notes.join(", ")}.`;
+  }
+  return "";
+}
+
+async function refreshBuyList() {
+  if (document.visibilityState !== "visible" || productsState !== "ready") {
+    return;
+  }
+  if (await loadWantedItems()) {
+    const note = fitCartToStock();
+    renderWantedItems();
+    renderCart();
+    if (note) {
+      showToast(note);
+    }
+  }
+}
+
+setInterval(refreshBuyList, BUY_LIST_REFRESH_MS);
+document.addEventListener("visibilitychange", refreshBuyList);
 
 function itemSpread(item) {
   const retail = Number(item.retailPrice);
@@ -226,7 +285,7 @@ function renderWantedItems() {
       }
 
       if (sort === "quantity") {
-        return Number(b.quantity) - Number(a.quantity);
+        return Number(b.remaining) - Number(a.remaining);
       }
 
       if (sort === "spread") {
@@ -257,18 +316,30 @@ function renderWantedItems() {
     return;
   }
 
+  // A refresh redraws the cards; keep any quantity the member is typing, and their focus.
+  const typed = Object.fromEntries(
+    [...wantedGrid.querySelectorAll(".product")].map((card) => [card.dataset.id, card.querySelector(".stepper input")?.value]),
+  );
+  const focusedId = document.activeElement?.closest?.("#wantedGrid .product")?.dataset.id;
+  const focusedStep = document.activeElement?.matches?.(".stepper input");
+
   wantedGrid.innerHTML = visibleItems
     .map((item) => {
       const inCart = cart[item.id] || 0;
+      const left = Number(item.remaining);
+      const soldOut = left <= 0;
+      const typedValue = Math.min(Number(typed[item.id]) || inCart || 1, Math.max(left, 1));
       const spread = itemSpread(item);
       const image = `<img src="${escapeHtml(productImageFor(item))}" alt="" loading="lazy">`;
 
       return `
-        <article class="card product${inCart ? " in-cart" : ""}" data-id="${escapeHtml(item.id)}">
+        <article class="card product${inCart ? " in-cart" : ""}${soldOut ? " sold-out" : ""}" data-id="${escapeHtml(item.id)}">
           <div class="product-image">
             ${image}
             <span class="product-tag">${escapeHtml(item.category)}</span>
-            ${inCart ? `<span class="product-tag in-order">${inCart} in order</span>` : ""}
+            ${soldOut
+              ? `<span class="product-tag sold-out-tag">Fully claimed</span>`
+              : inCart ? `<span class="product-tag in-order">${inCart} in order</span>` : ""}
           </div>
           <div class="product-body">
             <div>
@@ -282,21 +353,42 @@ function renderWantedItems() {
               </div>
               ${spread !== null ? `<span class="spread" title="Retail ${formatMoney(Number(item.retailPrice))}">${spread >= 0 ? "+" : "−"}${formatMoney(Math.abs(spread))} vs retail</span>` : ""}
             </div>
-            <p class="product-meta">${Number(item.quantity).toLocaleString()} wanted</p>
+            ${stockMarkup(item)}
             <div class="product-actions">
-              <div class="stepper">
-                <button type="button" data-step="-1" aria-label="Decrease quantity">−</button>
-                <input type="number" inputmode="numeric" min="1" max="${Number(item.quantity)}" value="${inCart || 1}" aria-label="Quantity for ${escapeHtml(item.name)}">
-                <button type="button" data-step="1" aria-label="Increase quantity">+</button>
-              </div>
-              <button class="btn ${inCart ? "btn-secondary" : "btn-primary"}" type="button" data-add>
-                ${inCart ? "Update" : "Add to order"}
-              </button>
+              ${soldOut
+                ? `<button class="btn btn-secondary" type="button" disabled>Fully claimed</button>`
+                : `<div class="stepper">
+                    <button type="button" data-step="-1" aria-label="Decrease quantity">−</button>
+                    <input type="number" inputmode="numeric" min="1" max="${left}" value="${typedValue}" aria-label="Quantity for ${escapeHtml(item.name)}">
+                    <button type="button" data-step="1" aria-label="Increase quantity">+</button>
+                  </div>
+                  <button class="btn ${inCart ? "btn-secondary" : "btn-primary"}" type="button" data-add>
+                    ${inCart ? "Update" : "Add to order"}
+                  </button>`}
             </div>
           </div>
         </article>`;
     })
     .join("");
+
+  if (focusedId) {
+    const card = [...wantedGrid.querySelectorAll(".product")].find((entry) => entry.dataset.id === focusedId);
+    (focusedStep ? card?.querySelector(".stepper input") : card?.querySelector("[data-add]"))?.focus();
+  }
+}
+
+// "7 of 10 left" with a bar that empties as units are claimed.
+function stockMarkup(item) {
+  const left = Number(item.remaining);
+  const total = Math.max(Number(item.quantity), 1);
+  const percent = Math.round((left / total) * 100);
+  const low = left > 0 && (left <= 3 || percent <= 20);
+
+  return `
+    <div class="stock${left <= 0 ? " is-out" : low ? " is-low" : ""}">
+      <p class="product-meta">${left <= 0 ? "All units claimed" : `<strong>${left.toLocaleString()}</strong> of ${Number(item.quantity).toLocaleString()} left`}${low ? " · going fast" : ""}</p>
+      <span class="stock-bar" aria-hidden="true"><span style="width: ${percent}%"></span></span>
+    </div>`;
 }
 
 /* Cart */
@@ -363,7 +455,7 @@ function renderCart() {
           </div>
           <div class="stepper">
             <button type="button" data-step="-1" aria-label="Decrease quantity">−</button>
-            <input type="number" inputmode="numeric" min="0" max="${Number(item.quantity)}" value="${quantity}" aria-label="Quantity for ${escapeHtml(item.name)}">
+            <input type="number" inputmode="numeric" min="0" max="${Number(item.remaining)}" value="${quantity}" aria-label="Quantity for ${escapeHtml(item.name)}">
             <button type="button" data-step="1" aria-label="Increase quantity">+</button>
           </div>
           <span class="line-total">${formatMoney(quantity * Number(item.cashout))}</span>
@@ -377,7 +469,7 @@ function renderCart() {
 
 function clampQuantity(value, max) {
   const number = Math.floor(Number(value) || 0);
-  return Math.max(0, Math.min(number, max || Infinity));
+  return Math.max(0, Math.min(number, Number.isFinite(max) ? max : Infinity));
 }
 
 async function submitOrder() {
@@ -403,6 +495,17 @@ async function submitOrder() {
       body: JSON.stringify({ items: entries.map(({ item, quantity }) => ({ id: item.id, quantity })) }),
     });
     const data = await response.json().catch(() => ({}));
+    if (response.status === 409 && data.remaining) {
+      for (const [id, left] of Object.entries(data.remaining)) {
+        const item = wantedItems.find((entry) => entry.id === id);
+        if (item) item.remaining = left;
+      }
+      fitCartToStock();
+      renderCart();
+      renderWantedItems();
+      loadWantedItems().then(renderWantedItems);
+      throw new Error(`${data.error} We updated your order, so check it and submit again.`);
+    }
     if (!response.ok) {
       throw new Error(data.error || "Couldn't submit your order. Please try again.");
     }
@@ -424,6 +527,7 @@ async function submitOrder() {
   renderAccountData();
   activateTab("orders");
   showToast(`${order.id} submitted for ${formatMoney(order.total)}.`);
+  loadWantedItems().then((changed) => changed && renderWantedItems());
 }
 
 /* Account data */
@@ -827,12 +931,15 @@ wantedGrid.addEventListener("click", (event) => {
   const stepButton = event.target.closest("[data-step]");
 
   if (stepButton) {
-    input.value = String(Math.max(1, clampQuantity(Number(input.value) + Number(stepButton.dataset.step), item.quantity)));
+    input.value = String(Math.max(1, clampQuantity(Number(input.value) + Number(stepButton.dataset.step), item.remaining)));
     return;
   }
 
   if (event.target.closest("[data-add]")) {
-    const quantity = Math.max(1, clampQuantity(input.value, item.quantity));
+    if (item.remaining <= 0) {
+      return;
+    }
+    const quantity = Math.max(1, clampQuantity(input.value, item.remaining));
     const wasInCart = Boolean(cart[item.id]);
     setCartQuantity(item.id, quantity);
     showToast(wasInCart ? `Updated ${item.name} to ${quantity}.` : `Added ${quantity} × ${item.name}.`);
@@ -851,7 +958,7 @@ cartLines.addEventListener("click", (event) => {
   const stepButton = event.target.closest("[data-step]");
 
   if (stepButton) {
-    setCartQuantity(id, clampQuantity((cart[id] || 0) + Number(stepButton.dataset.step), item.quantity));
+    setCartQuantity(id, clampQuantity((cart[id] || 0) + Number(stepButton.dataset.step), item.remaining));
   } else if (event.target.closest("[data-remove]")) {
     setCartQuantity(id, 0);
   }
@@ -862,7 +969,7 @@ cartLines.addEventListener("change", (event) => {
   const item = line && wantedItems.find((entry) => entry.id === line.dataset.id);
 
   if (item) {
-    setCartQuantity(item.id, clampQuantity(event.target.value, item.quantity));
+    setCartQuantity(item.id, clampQuantity(event.target.value, item.remaining));
   }
 });
 
@@ -1159,7 +1266,9 @@ loadActiveAccount()
   .then(() => {
     // The cart can only be checked against the buy list once it has loaded.
     loadCart();
+    const note = fitCartToStock();
     renderCart();
     renderWantedItems();
     loadOrders();
+    if (note) showToast(note);
   });

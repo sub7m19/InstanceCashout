@@ -1147,6 +1147,69 @@ button {
   right: 0.6rem;
 }
 
+.product-tag.sold-out-tag {
+  background: rgba(11, 17, 24, 0.85);
+  border: 1px solid var(--border-strong);
+  left: auto;
+  right: 0.6rem;
+}
+
+/* Units left in the current round */
+
+.stock {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.stock .product-meta {
+  margin: 0;
+}
+
+.stock strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-bar {
+  background: var(--surface-2);
+  border-radius: 999px;
+  display: block;
+  height: 4px;
+  overflow: hidden;
+}
+
+.stock-bar span {
+  background: var(--green);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transition: width 500ms var(--ease);
+}
+
+.stock.is-low .product-meta,
+.stock.is-low strong {
+  color: var(--gold);
+}
+
+.stock.is-low .stock-bar span {
+  background: var(--gold);
+}
+
+.product.sold-out .product-image img {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.product.sold-out h3,
+.product.sold-out .cashout {
+  opacity: 0.6;
+}
+
+.product.sold-out:hover {
+  box-shadow: none;
+  transform: none;
+}
+
 .product-body {
   display: flex;
   flex: 1;
