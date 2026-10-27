@@ -1,4 +1,4 @@
-const DISCORD_CLIENT_ID = "";
+const DISCORD_CLIENT_ID = "1564455712044884038";
 const DISCORD_SCOPE = "identify";
 const DISCORD_API_BASE = "https://discord.com/api/v10";
 const SESSION_KEY = "instanceCashoutDiscordSession";
