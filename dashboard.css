@@ -1194,10 +1194,22 @@ button {
   padding: 0.15rem 0.55rem;
 }
 
+/* Stepper and button share a row when the card is wide enough; on narrow cards the button
+   wraps to its own full-width row and the stepper stretches to match. */
 .product-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: auto;
+}
+
+.product-actions .stepper {
+  flex: 1 0 auto;
+}
+
+.product-actions .stepper input {
+  flex: 1;
+  min-width: 2.75rem;
 }
 
 .stepper {
@@ -1238,7 +1250,7 @@ button {
 }
 
 .product-actions .btn {
-  flex: 1;
+  flex: 999 1 7.5rem;
   padding-inline: 0.6rem;
 }
 
