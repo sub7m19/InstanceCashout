@@ -153,7 +153,13 @@ async function bootAuthGate() {
     return;
   }
 
-  setAuthenticated(true);
+  // Coming back from Discord: stay on the splash until the dashboard opens, so the
+  // signed-in homepage doesn't flash in between.
+  if (hasCallback) {
+    authStatus.textContent = "Signing you in…";
+  } else {
+    setAuthenticated(true);
+  }
 
   try {
     const user = await fetchDiscordUser(accessToken);
