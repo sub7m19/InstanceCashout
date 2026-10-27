@@ -30,14 +30,14 @@ No client secret or bot token is needed: the site signs in with Discord in the b
 
 ## Part 2: Cloudflare hostname (about 2 minutes)
 
-1. In Cloudflare, open **Zero Trust** → **Networks** → **Tunnels** → the `buffsquad` tunnel → **Edit**.
-2. **Public Hostname** tab → **Add a public hostname**:
-   - Subdomain: `instance-cashout` · Domain: `buffsquad.net`
+1. In Cloudflare, open **Networking** → **Tunnels** → click the `buffsquad` tunnel.
+2. In the **Routes** box, click **Add route** → **Published application**:
+   - Subdomain: `instance-cashout` · Domain: `buffsquad.net` · Path: empty
    - Service type: `HTTP` · URL: `localhost:8001`
-   - **Save hostname**.
+   - **Save**.
 
-Cloudflare creates the DNS record for you. Cloudflare's menu names change now and then;
-you're looking for adding a public hostname to the existing tunnel.
+Cloudflare creates the DNS record for you. Use a single-level subdomain (a hyphen, not a dot):
+Cloudflare's free certificate only covers `<name>.buffsquad.net`.
 
 ## Part 3: Set up the VPS (about 10 minutes, mostly waiting)
 
