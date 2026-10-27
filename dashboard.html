@@ -16,13 +16,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="dashboard.css?v=5">
+    <link rel="stylesheet" href="dashboard.css?v=6">
   </head>
   <body>
     <header class="dash-header">
       <a class="dash-brand" href="dashboard.html" aria-label="Instance Cashout dashboard">Instance Cashout</a>
       <nav aria-label="Account">
-        <button class="header-link" type="button" data-tab-link="settings">Settings</button>
+        <button class="header-link optional" type="button" data-tab-link="settings">Settings</button>
         <button class="header-link" id="dashboardLogout" type="button">Log out</button>
       </nav>
     </header>
@@ -153,11 +153,11 @@
               </label>
               <label class="field">
                 <span>Cashout per unit</span>
-                <input id="wantedCashout" name="wantedCashout" type="number" min="0" step="1" placeholder="300" required>
+                <input id="wantedCashout" name="wantedCashout" type="number" inputmode="numeric" min="0" step="1" placeholder="300" required>
               </label>
               <label class="field">
                 <span>Quantity wanted</span>
-                <input id="wantedQuantity" name="wantedQuantity" type="number" min="1" step="1" value="1" required>
+                <input id="wantedQuantity" name="wantedQuantity" type="number" inputmode="numeric" min="1" step="1" value="1" required>
               </label>
               <label class="field">
                 <span>Image URL</span>
@@ -300,7 +300,7 @@
             </label>
             <label class="field">
               <span>Tracking number</span>
-              <input id="shipTracking" name="tracking" type="text" autocomplete="off" placeholder="1Z999AA10123456784" required>
+              <input id="shipTracking" name="tracking" type="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="done" placeholder="1Z999AA10123456784" required>
               <small class="field-error" id="trackingError" hidden>Enter your tracking number.</small>
             </label>
           </div>
@@ -350,6 +350,6 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="dashboard.js?v=10"></script>
+    <script src="dashboard.js?v=11"></script>
   </body>
 </html>

@@ -93,11 +93,15 @@ button {
 }
 
 .dash-brand {
+  align-items: center;
+  display: inline-flex;
   font-size: 1.05rem;
+  min-height: 44px;
   font-weight: 900;
   letter-spacing: 0.02em;
   text-decoration: none;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .dash-header nav {
@@ -113,10 +117,11 @@ button {
   color: var(--text-muted);
   font-size: 0.92rem;
   font-weight: 600;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0.5rem 0.75rem;
   text-decoration: none;
   transition: color 150ms var(--ease), background 150ms var(--ease);
+  white-space: nowrap;
 }
 
 .header-link:hover {
@@ -129,6 +134,8 @@ button {
 .dash-main {
   display: grid;
   gap: 1.25rem;
+  /* minmax(0, ...) lets the tab bar and chips scroll inside the page instead of widening it on phones */
+  grid-template-columns: minmax(0, 1fr);
   margin: 0 auto;
   max-width: 1200px;
   padding: clamp(1.25rem, 3vw, 2rem) clamp(1rem, 4vw, 2.5rem) 7rem;
@@ -586,6 +593,24 @@ button {
   gap: 0.25rem;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar,
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+/* On narrow screens, fade the side that has more tabs or chips to scroll to */
+[data-fade="end"] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+}
+
+[data-fade="start"] {
+  mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent);
+}
+
+[data-fade="both"] {
+  mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
 }
 
 .tab {
@@ -1104,7 +1129,7 @@ button {
   background: rgba(11, 17, 24, 0.78);
   border-radius: 999px;
   color: var(--text);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   left: 0.6rem;
   letter-spacing: 0.02em;
@@ -1187,8 +1212,9 @@ button {
   border: 0;
   color: var(--text);
   font-size: 1.1rem;
-  height: 42px;
-  width: 36px;
+  height: 44px;
+  touch-action: manipulation;
+  width: 44px;
 }
 
 .stepper button:hover {
@@ -1201,6 +1227,7 @@ button {
   border: 0;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  height: 44px;
   text-align: center;
   width: 2.75rem;
 }
@@ -1470,6 +1497,14 @@ button {
 @media (max-width: 640px) {
   .dash-header .header-link.optional {
     display: none;
+  }
+
+  .dash-brand {
+    font-size: 0.95rem;
+  }
+
+  .header-link {
+    padding-inline: 0.6rem;
   }
 
   .greeting-actions,

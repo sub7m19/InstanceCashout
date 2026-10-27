@@ -317,7 +317,7 @@ function renderWantedItems() {
             <div class="product-actions">
               <div class="stepper">
                 <button type="button" data-step="-1" aria-label="Decrease quantity">−</button>
-                <input type="number" min="1" max="${Number(item.quantity)}" value="${inCart || 1}" aria-label="Quantity for ${escapeHtml(item.name)}">
+                <input type="number" inputmode="numeric" min="1" max="${Number(item.quantity)}" value="${inCart || 1}" aria-label="Quantity for ${escapeHtml(item.name)}">
                 <button type="button" data-step="1" aria-label="Increase quantity">+</button>
               </div>
               <button class="btn ${inCart ? "btn-secondary" : "btn-primary"}" type="button" data-add>
@@ -394,7 +394,7 @@ function renderCart() {
           </div>
           <div class="stepper">
             <button type="button" data-step="-1" aria-label="Decrease quantity">−</button>
-            <input type="number" min="0" max="${Number(item.quantity)}" value="${quantity}" aria-label="Quantity for ${escapeHtml(item.name)}">
+            <input type="number" inputmode="numeric" min="0" max="${Number(item.quantity)}" value="${quantity}" aria-label="Quantity for ${escapeHtml(item.name)}">
             <button type="button" data-step="1" aria-label="Increase quantity">+</button>
           </div>
           <span class="line-total">${formatMoney(quantity * Number(item.cashout))}</span>
@@ -703,6 +703,13 @@ function activateTab(tabName, { focus = false, updateHash = true } = {}) {
 
     if (selected && focus) {
       tab.focus();
+    }
+
+    if (selected) {
+      // On phones the tab bar scrolls sideways; center the chosen tab without scrolling the page.
+      const bar = tab.parentElement;
+      const offset = tab.getBoundingClientRect().left - bar.getBoundingClientRect().left;
+      bar.scrollLeft += offset - (bar.clientWidth - tab.offsetWidth) / 2;
     }
   });
 
@@ -1177,6 +1184,27 @@ logoutButton.addEventListener("click", () => {
   }
 
   window.location.href = "index.html";
+});
+
+/* Rows that scroll sideways on narrow screens (tabs, chips): fade the side with more to see. */
+
+function updateScrollFade(row) {
+  const more = row.scrollWidth - row.clientWidth;
+  const atStart = row.scrollLeft <= 2;
+  const atEnd = row.scrollLeft >= more - 2;
+
+  if (more <= 2) {
+    delete row.dataset.fade;
+  } else {
+    row.dataset.fade = atStart ? "end" : atEnd ? "start" : "both";
+  }
+}
+
+document.querySelectorAll(".tabs, .chips").forEach((row) => {
+  row.addEventListener("scroll", () => updateScrollFade(row), { passive: true });
+  new ResizeObserver(() => updateScrollFade(row)).observe(row);
+  // Chips are re-rendered when the buy list changes.
+  new MutationObserver(() => updateScrollFade(row)).observe(row, { childList: true });
 });
 
 loadWantedItems();
